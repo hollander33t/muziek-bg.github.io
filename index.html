@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Background Engine - Hugging Face Edition</title>
+    <title>Cinematic Background Engine - Ultimate Debug Edition</title>
     <style>
         :root {
             --blur-amount: 10px;        
@@ -60,8 +60,6 @@
     <script>
         const LASTFM_API_KEY = "6c9c00e45e415acfc71a217c7ba023c8";
         const LASTFM_USER = "Hollander33";
-        
-        // HIER IS DE NIEUWE HUGGING FACE URL (zonder ?download=true)
         const BASE_VIDEO_URL = "https://huggingface.co/datasets/Hollander33/cinematic-backgrounds/resolve/main/";
 
         const VIDEO_BACKGROUNDS = [
@@ -172,7 +170,7 @@
         const bg1 = document.getElementById("bg1");
         const bg2 = document.getElementById("bg2");
 
-        console.log("%c 🚀 Cinematic Engine MASTER gestart. ", "background: #111; color: #00ff00; font-weight: bold; padding: 5px;");
+        console.log("%c 🚀 Cinematic Engine - DEBUG EDITION gestart. ", "background: #111; color: #00ff00; font-weight: bold; padding: 5px;");
 
         async function fetchLastFm() {
             const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${LASTFM_USER}&api_key=${LASTFM_API_KEY}&format=json&limit=1`;
@@ -184,8 +182,9 @@
                 const uniqueId = track.name + track.artist['#text'];
                 if (uniqueId !== currentTrackId) {
                     currentTrackId = uniqueId;
-                    console.group(`%c 🎵 TRACK: ${track.name} `, "background: #222; color: #fff; padding: 3px;");
+                    console.group(`%c 🎵 NIEUWE TRACK: ${track.name} `, "background: #222; color: #fff; padding: 5px; font-size: 1.1em;");
                     console.info(`👤 Artist: ${track.artist['#text']}`);
+                    console.info(`💿 Album: ${track.album['#text']}`);
                     await processTrack(track);
                     console.groupEnd();
                 }
@@ -200,12 +199,12 @@
 
             if (matchedVideo) {
                 const fullUrl = BASE_VIDEO_URL + matchedVideo;
-                console.info(`%c ✅ VIDEO MATCH: ${matchedVideo}`, "color: #00ff00; font-weight: bold;");
+                console.info(`%c 🏆 WINNAAR: ${matchedVideo}`, "color: #00ff00; font-weight: bold; font-size: 1.2em;");
                 if (currentMode !== 'video' || videoLayer.src !== fullUrl) {
                     await runFadeToBlack(() => { playVideo(fullUrl); currentMode = 'video'; });
                 }
             } else {
-                console.info("%c 🔍 Geen video match. Zoek cover op basis van Titel -> Artist.", "color: #ffa500;");
+                console.info("%c 🧹 Geen video match gevonden. Start cover art zoektocht...", "color: #ffa500;");
                 const highResImage = await findHighResCover(artist, title, track.image[3]['#text']);
                 
                 const imgLoader = new Image();
@@ -229,50 +228,97 @@
             setTimeout(() => fadeOverlay.classList.remove('black'), 50);
         }
 
+        // --- VERBETERDE MATCH FUNCTIE MET PUNTENTELLING ---
         function findMatchingVideo(artist, album, title) {
             const lowerTitle = title.toLowerCase();
             const lowerArtist = artist.toLowerCase();
             const lowerAlbum = (album || "").toLowerCase();
 
+            let bestMatch = null;
+            let highestScore = 0;
+
+            console.groupCollapsed("🔍 Match Analyse");
+
             for (const item of VIDEO_BACKGROUNDS) {
                 let m = 0;
-                if (item.match.artist?.some(a => lowerArtist.includes(a.toLowerCase()))) m++;
-                if (item.match.album?.some(al => lowerAlbum.includes(al.toLowerCase()))) {
-                    if (lowerAlbum.includes("f1") || lowerAlbum.includes("formula 1")) m += 2; else m++;
+                let reasons = [];
+
+                // 1. Check Artist (1 punt)
+                if (item.match.artist?.some(a => lowerArtist.includes(a.toLowerCase()))) {
+                    m++;
+                    reasons.push("Artist");
                 }
-                if (item.match.track?.some(t => lowerTitle.includes(t.toLowerCase()))) m++;
                 
-                if (m > 0) console.log(`   - Score voor [${item.video}]: ${m}`);
-                if (m >= 2) return item.video;
+                // 2. Check Album (1 punt, of 2 voor F1)
+                if (item.match.album?.some(al => lowerAlbum.includes(al.toLowerCase()))) {
+                    if (lowerAlbum.includes("f1") || lowerAlbum.includes("formula 1")) {
+                         m += 2; 
+                         reasons.push("Album (F1 Bonus)");
+                    } else {
+                         m++;
+                         reasons.push("Album");
+                    }
+                }
+                
+                // 3. Check Track (3 punten voor exact, 1 voor deel)
+                if (item.match.track) {
+                    // EXACTE MATCH (BELANGRIJK VOOR 'Time' vs 'No Time...')
+                    if (item.match.track.some(t => t.toLowerCase() === lowerTitle)) {
+                        m += 3; 
+                        reasons.push("Track (EXACT!)");
+                    } 
+                    // DEEL MATCH
+                    else if (item.match.track.some(t => lowerTitle.includes(t.toLowerCase()))) {
+                        m++; 
+                        reasons.push("Track (Partial)");
+                    }
+                }
+                
+                // Loggen als er punten zijn
+                if (m > 0) {
+                    console.log(`Kandidaat: [${item.video}] - Score: ${m} (${reasons.join(", ")})`);
+                }
+
+                // Check of dit de nieuwe beste is
+                if (m > highestScore) {
+                    highestScore = m;
+                    bestMatch = item.video;
+                }
             }
-            return null;
+            console.groupEnd();
+            
+            // Drempelwaarde is 2 punten. Wint er niemand? Dan null.
+            return highestScore >= 2 ? bestMatch : null;
         }
 
         async function findHighResCover(a, t, fallback) {
-            // VERBETERD: Zoekopdracht met TITEL eerst
             const query = encodeURIComponent(`${t} ${a}`);
 
-            console.log(`   1. Deezer check voor: "${t} - ${a}"`);
+            console.groupCollapsed("🖼️ Cover Art Zoeken");
+            console.log(`Deezer check voor: "${t} - ${a}"`);
             try {
                 const r = await fetch(`https://corsproxy.io/?https://api.deezer.com/search/track?q=${query}`);
                 const d = await r.json();
                 if (d.data?.[0]) { 
-                    console.info("   🎯 Deezer Success"); 
+                    console.info("✅ Deezer Success"); 
+                    console.groupEnd();
                     return d.data[0].album.cover_xl; 
                 }
             } catch (e) {}
 
-            console.log(`   2. iTunes check voor: "${t} - ${a}"`);
+            console.log(`iTunes check voor: "${t} - ${a}"`);
             try {
                 const r = await fetch(`https://itunes.apple.com/search?term=${query}&media=music&limit=1`);
                 const d = await r.json();
                 if (d.results?.[0]) { 
-                    console.info("   🎯 iTunes Success"); 
+                    console.info("✅ iTunes Success"); 
+                    console.groupEnd();
                     return d.results[0].artworkUrl100.replace('100x100bb', '1000x1000bb'); 
                 }
             } catch (e) {}
 
-            console.log("   3. Geen resultaten. Gebruik Last.fm fallback.");
+            console.log("❌ Geen resultaten. Gebruik Last.fm fallback.");
+            console.groupEnd();
             return fallback;
         }
 
@@ -304,4 +350,3 @@
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"50c14a43f15f4969bd746be30db90030","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
-
