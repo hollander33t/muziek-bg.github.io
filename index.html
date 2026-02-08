@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Background Engine - Title First Edition</title>
+    <title>Cinematic Background Engine - Hugging Face Edition</title>
     <style>
         :root {
-            --blur-amount: 10px;       
-            --saturation: 120%;        
-            --brightness: 100%;        
-            --distortion-amount: 30;   
-            --noise-frequency: 0.01;   
-            --animation-speed: 60s;    
-            --transition-speed: 2.5s;  
+            --blur-amount: 10px;        
+            --saturation: 120%;          
+            --brightness: 100%;          
+            --distortion-amount: 30;    
+            --noise-frequency: 0.01;    
+            --animation-speed: 60s;      
+            --transition-speed: 2.5s;   
             --fade-speed: 0.8s; 
         }
 
@@ -60,11 +60,13 @@
     <script>
         const LASTFM_API_KEY = "6c9c00e45e415acfc71a217c7ba023c8";
         const LASTFM_USER = "Hollander33";
-        const BASE_VIDEO_URL = "https://homeassistant.hollandercloud.com/local/lastfm/";
+        
+        // HIER IS DE NIEUWE HUGGING FACE URL (zonder ?download=true)
+        const BASE_VIDEO_URL = "https://huggingface.co/datasets/Hollander33/cinematic-backgrounds/resolve/main/";
 
         const VIDEO_BACKGROUNDS = [
           {
-            video: "HARRY_POTTER.mp4",
+            video: "HARRY_POTTER.MP4",
             match: {
               artist: ["John Williams", "Patrick Doyle", "Nicholas Hooper", "Alexandre Desplat"],
               album: ["Harry Potter", "Philosopher's Stone", "Chamber of Secrets", "Prisoner of Azkaban", "Goblet of Fire", "Order of the Phoenix", "Half-Blood Prince", "Deathly Hallows"],
@@ -72,7 +74,7 @@
             }
           },
           {
-            video: "DUNE.mp4",
+            video: "DUNE.MP4",
             match: { 
                 artist: ["Hans Zimmer"], 
                 album: ["Dune", "Dune: Part Two", "The Dune Sketchbook", "Dune (Original Motion Picture Soundtrack)"], 
@@ -80,15 +82,23 @@
             }
           },
           {
-            video: "INCEPTION.mp4",
+            video: "INCEPTION.MP4",
             match: { 
                 artist: ["Hans Zimmer"], 
-                album: ["Inecption",], 
-                track: ["Time"] 
+                album: ["Inception", "Inception (Music from the Motion Picture)"], 
+                track: ["Time", "Dream Is Collapsing", "Mombasa", "Old Souls", "Waiting for a Train"] 
             }
           },
           {
-            video: "F1.mp4",
+            video: "TENET.MP4",
+            match: { 
+                artist: ["Ludwig Göransson"], 
+                album: ["Tenet", "Tenet (Original Motion Picture Soundtrack)"], 
+                track: ["Rainy Night In Tallinn", "Windmills", "Meeting Neil", "Posterity", "The Protagonist", "Foils", "Sator", "Trucks In Place", "Red Room Blue Room", "Inversion"] 
+            }
+          },
+          {
+            video: "F1.MP4",
             match: { 
                 artist: ["Brian Tyler"], 
                 album: ["Formula 1", "F1 Theme", "F1 The Album"], 
@@ -96,15 +106,15 @@
             }
           },
           {
-             video: "THE_ADVENTURES_OF_TINTIN.mp4",
-             match: { 
-                 artist: ["John Williams"], 
-                 album: ["The Adventures of Tintin", "The Adventures of Tintin: The Secret of the Unicorn"], 
-                 track: ["The Adventures of Tintin", "Sir Francis and the Unicorn", "Snowy's Theme", "The Secret of the Unicorn", "Tintin", "Captain Haddock", "Sir Francis Drake", "The Milanese Nightingale", "Pursuit on the Karoudjan", "Red Rackham's Curse", "The Adventure Continues", "Bagghar", "Dueling Pirates"] 
-             }
+              video: "THE_ADVENTURES_OF_TINTIN.MP4",
+              match: { 
+                  artist: ["John Williams"], 
+                  album: ["The Adventures of Tintin", "The Adventures of Tintin: The Secret of the Unicorn"], 
+                  track: ["The Adventures of Tintin", "Sir Francis and the Unicorn", "Snowy's Theme", "The Secret of the Unicorn", "Tintin", "Captain Haddock", "Sir Francis Drake", "The Milanese Nightingale", "Pursuit on the Karoudjan", "Red Rackham's Curse", "The Adventure Continues", "Bagghar", "Dueling Pirates"] 
+              }
           },
           {
-            video: "GAME_OF_THRONES.mp4",
+            video: "GAME_OF_THRONES.MP4",
             match: {
               artist: ["Ramin Djawadi"],
               album: ["Game of Thrones", "Game of Thrones Season 1-8"],
@@ -112,7 +122,7 @@
             }
           },
           {
-            video: "HOUSE_OF_THE_DRAGON.mp4",
+            video: "HOUSE_OF_THE_DRAGON.MP4",
             match: { 
                 artist: ["Ramin Djawadi"], 
                 album: ["HOUSE OF THE DRAGON", "House of the Dragon: Season 1"], 
@@ -120,7 +130,7 @@
             }
           },
           {
-            video: "INTERSTELLAR.mp4",
+            video: "INTERSTELLAR.MP4",
             match: { 
                 artist: ["Hans Zimmer"], 
                 album: ["Interstellar"], 
@@ -128,7 +138,7 @@
             }
           },
           {
-            video: "OPPENHEIMER.mp4",
+            video: "OPPENHEIMER.MP4",
             match: { 
                 artist: ["Ludwig Göransson"], 
                 album: ["Oppenheimer", "Oppenheimer: Original Motion Picture"], 
@@ -136,7 +146,7 @@
             }
           },
           {
-            video: "THE_DARK_KNIGHT_TRILOGY.mp4",
+            video: "THE_DARK_KNIGHT_TRILOGY.MP4",
             match: {
               artist: ["Hans Zimmer", "James Newton Howard", "Hanz Zimmer"],
               album: ["The Dark Knight", "The Batman Trilogy", "Batman Begins", "The Dark Knight Rises", "The Dark Knight (Collectors Edition)"],
@@ -144,7 +154,7 @@
             }
           },
           {
-            video: "MAN_OF_STEEL.mp4",
+            video: "MAN_OF_STEEL.MP4",
             match: { 
                 artist: ["Hans Zimmer"], 
                 album: ["Man of Steel", "Man of Steel (Original Motion Picture Soundtrack)"], 
@@ -294,5 +304,3 @@
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"50c14a43f15f4969bd746be30db90030","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
-
-
