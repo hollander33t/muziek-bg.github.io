@@ -13,12 +13,25 @@
             --noise-frequency: 0.01;    
             --animation-speed: 60s;      
             --transition-speed: 2.5s;   
-            --fade-speed: 0.8s; 
+            --fade-speed: 2.0s; /* Iets trager voor een mooiere fade-out naar zwart */
         }
 
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000; overflow: hidden; }
         #bg-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
-        #fade-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: #000; opacity: 0; z-index: 100; pointer-events: none; transition: opacity var(--fade-speed) ease-in-out; }
+        
+        /* Fade overlay voor transities en de 60s idle-to-black */
+        #fade-overlay { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background-color: #000; 
+            opacity: 0; 
+            z-index: 100; 
+            pointer-events: none; 
+            transition: opacity var(--fade-speed) ease-in-out; 
+        }
         #fade-overlay.black { opacity: 1; }
 
         .bg-layer {
@@ -164,6 +177,10 @@
         let currentTrackId = "";
         let currentMode = ""; 
         let activeBgIndex = 0; 
+        
+        // Idle tracking
+        let idleTimer = null;
+        let isFadedOut = false;
 
         const fadeOverlay = document.getElementById("fade-overlay");
         const videoLayer = document.getElementById("video-layer");
@@ -177,16 +194,47 @@
             try {
                 const response = await fetch(url);
                 const data = await response.json();
-                if (!data.recenttracks?.track?.[0]) return;
-                const track = data.recenttracks.track[0];
-                const uniqueId = track.name + track.artist['#text'];
-                if (uniqueId !== currentTrackId) {
-                    currentTrackId = uniqueId;
-                    console.group(`%c 🎵 NIEUWE TRACK: ${track.name} `, "background: #222; color: #fff; padding: 5px; font-size: 1.1em;");
-                    console.info(`👤 Artist: ${track.artist['#text']}`);
-                    console.info(`💿 Album: ${track.album['#text']}`);
-                    await processTrack(track);
-                    console.groupEnd();
+                const track = data.recenttracks?.track?.[0];
+                
+                if (!track) return;
+
+                // Check of de track op dit moment wordt afgespeeld
+                const isNowPlaying = track['@attr'] && track['@attr'].nowplaying === 'true';
+
+                if (isNowPlaying) {
+                    // Er speelt muziek: reset timer en haal overlay weg indien nodig
+                    if (idleTimer) {
+                        clearTimeout(idleTimer);
+                        idleTimer = null;
+                    }
+
+                    if (isFadedOut) {
+                        fadeOverlay.classList.remove('black');
+                        isFadedOut = false;
+                        if (currentMode === 'video') videoLayer.play();
+                        console.log("%c ▶️ Muziek hervat: Fade-out geannuleerd.", "color: #00ff00;");
+                    }
+
+                    const uniqueId = track.name + track.artist['#text'];
+                    if (uniqueId !== currentTrackId) {
+                        currentTrackId = uniqueId;
+                        console.group(`%c 🎵 NIEUWE TRACK: ${track.name} `, "background: #222; color: #fff; padding: 5px; font-size: 1.1em;");
+                        console.info(`👤 Artist: ${track.artist['#text']}`);
+                        console.info(`💿 Album: ${track.album['#text']}`);
+                        await processTrack(track);
+                        console.groupEnd();
+                    }
+                } else {
+                    // Geen actieve muziek: start timer voor fade naar zwart
+                    if (!idleTimer && !isFadedOut) {
+                        console.warn("%c ⏸️ Geen actieve muziek. Scherm wordt over 60 sec zwart...", "color: #ffa500;");
+                        idleTimer = setTimeout(() => {
+                            fadeOverlay.classList.add('black');
+                            isFadedOut = true;
+                            videoLayer.pause(); // Stop video om CPU/GPU te besparen
+                            console.log("%c 🌑 Scherm op zwart na 60 sec inactiviteit.", "background: #000; color: #fff;");
+                        }, 60000); 
+                    }
                 }
             } catch (e) { console.error("❌ Last.fm Error:", e); }
         }
@@ -225,10 +273,11 @@
             fadeOverlay.classList.add('black');
             await new Promise(r => setTimeout(r, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fade-speed')) * 1000));
             cb();
-            setTimeout(() => fadeOverlay.classList.remove('black'), 50);
+            setTimeout(() => {
+                if (!isFadedOut) fadeOverlay.classList.remove('black');
+            }, 50);
         }
 
-        // --- VERBETERDE MATCH FUNCTIE MET PUNTENTELLING ---
         function findMatchingVideo(artist, album, title) {
             const lowerTitle = title.toLowerCase();
             const lowerArtist = artist.toLowerCase();
@@ -243,13 +292,11 @@
                 let m = 0;
                 let reasons = [];
 
-                // 1. Check Artist (1 punt)
                 if (item.match.artist?.some(a => lowerArtist.includes(a.toLowerCase()))) {
                     m++;
                     reasons.push("Artist");
                 }
                 
-                // 2. Check Album (1 punt, of 2 voor F1)
                 if (item.match.album?.some(al => lowerAlbum.includes(al.toLowerCase()))) {
                     if (lowerAlbum.includes("f1") || lowerAlbum.includes("formula 1")) {
                          m += 2; 
@@ -260,26 +307,21 @@
                     }
                 }
                 
-                // 3. Check Track (3 punten voor exact, 1 voor deel)
                 if (item.match.track) {
-                    // EXACTE MATCH (BELANGRIJK VOOR 'Time' vs 'No Time...')
                     if (item.match.track.some(t => t.toLowerCase() === lowerTitle)) {
                         m += 3; 
                         reasons.push("Track (EXACT!)");
                     } 
-                    // DEEL MATCH
                     else if (item.match.track.some(t => lowerTitle.includes(t.toLowerCase()))) {
                         m++; 
                         reasons.push("Track (Partial)");
                     }
                 }
                 
-                // Loggen als er punten zijn
                 if (m > 0) {
                     console.log(`Kandidaat: [${item.video}] - Score: ${m} (${reasons.join(", ")})`);
                 }
 
-                // Check of dit de nieuwe beste is
                 if (m > highestScore) {
                     highestScore = m;
                     bestMatch = item.video;
@@ -287,7 +329,6 @@
             }
             console.groupEnd();
             
-            // Drempelwaarde is 2 punten. Wint er niemand? Dan null.
             return highestScore >= 2 ? bestMatch : null;
         }
 
@@ -295,7 +336,6 @@
             const query = encodeURIComponent(`${t} ${a}`);
 
             console.groupCollapsed("🖼️ Cover Art Zoeken");
-            console.log(`Deezer check voor: "${t} - ${a}"`);
             try {
                 const r = await fetch(`https://corsproxy.io/?https://api.deezer.com/search/track?q=${query}`);
                 const d = await r.json();
@@ -306,7 +346,6 @@
                 }
             } catch (e) {}
 
-            console.log(`iTunes check voor: "${t} - ${a}"`);
             try {
                 const r = await fetch(`https://itunes.apple.com/search?term=${query}&media=music&limit=1`);
                 const d = await r.json();
@@ -347,6 +386,5 @@
         fetchLastFm();
         setInterval(fetchLastFm, 5000);
     </script>
-<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"50c14a43f15f4969bd746be30db90030","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
