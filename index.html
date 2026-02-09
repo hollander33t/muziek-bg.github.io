@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Background Engine - Ultimate Debug Edition</title>
+    <title>Cinematic Background Engine - Ultimate Edition</title>
     <style>
         :root {
             --blur-amount: 10px;        
@@ -47,17 +47,22 @@
         .bg-layer.entering { opacity: 1; z-index: 4; animation: enterZoom var(--transition-speed) cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
         .bg-layer.exiting { z-index: 6; animation: explodeOut var(--transition-speed) ease-out forwards; }
 
-        #video-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: 1; }
+        #video-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: 1; transition: opacity 1s ease-in; }
         #video-layer.active { opacity: 1 !important; z-index: 10 !important; }
+        
+        /* Debug info voor als je wilt zien wat er gebeurt */
+        #debug-status { position: fixed; bottom: 10px; left: 10px; color: rgba(255,255,255,0.3); font-family: monospace; font-size: 10px; z-index: 200; pointer-events: none; }
     </style>
 </head>
 <body>
+
+    <div id="debug-status" id="status-text">Engine Standby</div>
 
     <div id="bg-container">
         <div id="fade-overlay"></div>
         <img id="bg1" class="bg-layer" src="" alt="">
         <img id="bg2" class="bg-layer" src="" alt="">
-        <video id="video-layer" muted loop playsinline></video>
+        <video id="video-layer" muted loop playsinline autoplay></video>
     </div>
 
     <svg style="position: absolute; width: 0; height: 0; overflow: hidden;">
@@ -92,7 +97,6 @@
         let currentTrackId = "";
         let currentMode = ""; 
         let activeBgIndex = 0; 
-        
         let idleTimer = null;
         let isFadedOut = false;
 
@@ -100,8 +104,10 @@
         const videoLayer = document.getElementById("video-layer");
         const bg1 = document.getElementById("bg1");
         const bg2 = document.getElementById("bg2");
+        const debugText = document.getElementById("debug-status");
 
-        console.log("%c 🚀 Cinematic Engine - Case-Insensitive Edition gestart. ", "background: #111; color: #00ff00; font-weight: bold; padding: 5px;");
+        // Helper voor debuggen op het scherm
+        function setStatus(msg) { debugText.innerText = msg; console.log("Status:", msg); }
 
         async function fetchLastFm() {
             const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${LASTFM_USER}&api_key=${LASTFM_API_KEY}&format=json&limit=1`;
@@ -124,9 +130,8 @@
                     const uniqueId = track.name + track.artist['#text'];
                     if (uniqueId !== currentTrackId) {
                         currentTrackId = uniqueId;
-                        console.group(`%c 🎵 NIEUWE TRACK: ${track.name} `, "background: #222; color: #fff; padding: 5px;");
+                        setStatus(`Nieuwe track: ${track.name}`);
                         await processTrack(track);
-                        console.groupEnd();
                     }
                 } else {
                     if (!idleTimer && !isFadedOut) {
@@ -134,10 +139,11 @@
                             fadeOverlay.classList.add('black');
                             isFadedOut = true;
                             videoLayer.pause();
+                            setStatus("Idle - Fading out");
                         }, 60000); 
                     }
                 }
-            } catch (e) { console.error("❌ Last.fm Error:", e); }
+            } catch (e) { setStatus("Last.fm Fetch Error"); }
         }
 
         async function processTrack(track) {
@@ -148,16 +154,15 @@
 
             if (matchedVideo) {
                 const fullUrl = BASE_VIDEO_URL + matchedVideo;
-                console.info(`%c 🏆 WINNAAR: ${matchedVideo}`, "color: #00ff00; font-weight: bold;");
+                setStatus(`Match gevonden: ${matchedVideo}`);
                 
-                // Case-insensitive check voor de huidige bron
                 const isSameVideo = videoLayer.src.toLowerCase() === fullUrl.toLowerCase();
 
                 if (currentMode !== 'video' || !isSameVideo) {
                     await runFadeToBlack(() => { playVideo(fullUrl); currentMode = 'video'; });
                 }
             } else {
-                console.info("%c 🧹 Geen video match. Cover art zoeken...", "color: #ffa500;");
+                setStatus("Geen video match, zoek cover art...");
                 const highResImage = await findHighResCover(artist, title, track.image[3]['#text']);
                 
                 const imgLoader = new Image();
@@ -218,8 +223,14 @@
         }
 
         function transitionToImage(url) {
-            videoLayer.classList.remove('active'); videoLayer.pause();
-            if (activeBgIndex === 0) { bg1.src = url; bg1.classList.add('active'); activeBgIndex = 1; return; }
+            videoLayer.classList.remove('active'); 
+            videoLayer.pause();
+            if (activeBgIndex === 0) { 
+                bg1.src = url; 
+                bg1.classList.add('active'); 
+                activeBgIndex = 1; 
+                return; 
+            }
             let oldBg = activeBgIndex === 1 ? bg1 : bg2;
             let newBg = activeBgIndex === 1 ? bg2 : bg1;
             newBg.src = url;
@@ -232,14 +243,29 @@
         }
 
         function playVideo(url) {
-            bg1.classList.remove('active'); bg2.classList.remove('active');
-            videoLayer.src = url; videoLayer.load();
-            videoLayer.play().then(() => videoLayer.classList.add('active')).catch(e => console.error(e));
+            bg1.classList.remove('active', 'entering', 'exiting'); 
+            bg2.classList.remove('active', 'entering', 'exiting');
+            
+            setStatus("Video loading...");
+            videoLayer.src = url;
+            videoLayer.load();
+            
+            videoLayer.oncanplay = () => {
+                videoLayer.play().then(() => {
+                    videoLayer.classList.add('active');
+                    setStatus("Video playing");
+                }).catch(e => setStatus("Autoplay blocked - Click Page"));
+            };
         }
+
+        // Eenmalige klik om autoplay-beperkingen van browsers te omzeilen
+        document.body.addEventListener('click', () => {
+            if (currentMode === 'video') videoLayer.play();
+            setStatus("Engine Active");
+        }, { once: true });
 
         fetchLastFm();
         setInterval(fetchLastFm, 5000);
     </script>
 </body>
 </html>
-
