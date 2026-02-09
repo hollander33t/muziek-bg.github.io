@@ -333,33 +333,46 @@
         }
 
         async function findHighResCover(a, t, fallback) {
-            const query = encodeURIComponent(`${t} ${a}`);
+    const query = encodeURIComponent(`${t} ${a}`);
+    console.groupCollapsed("🖼️ High-Res Cover Search");
 
-            console.groupCollapsed("🖼️ Cover Art Zoeken");
-            try {
-                const r = await fetch(`https://corsproxy.io/?https://api.deezer.com/search/track?q=${query}`);
-                const d = await r.json();
-                if (d.data?.[0]) { 
-                    console.info("✅ Deezer Success"); 
-                    console.groupEnd();
-                    return d.data[0].album.cover_xl; 
-                }
-            } catch (e) {}
-
-            try {
-                const r = await fetch(`https://itunes.apple.com/search?term=${query}&media=music&limit=1`);
-                const d = await r.json();
-                if (d.results?.[0]) { 
-                    console.info("✅ iTunes Success"); 
-                    console.groupEnd();
-                    return d.results[0].artworkUrl100.replace('100x100bb', '1000x1000bb'); 
-                }
-            } catch (e) {}
-
-            console.log("❌ Geen resultaten. Gebruik Last.fm fallback.");
+    // 1. Deezer (Snel en vaak 1000x1000)
+    try {
+        const r = await fetch(`https://corsproxy.io/?https://api.deezer.com/search/track?q=${query}`);
+        const d = await r.json();
+        if (d.data?.[0]?.album?.cover_xl) {
+            console.info("✅ Deezer Success");
             console.groupEnd();
-            return fallback;
+            return d.data[0].album.cover_xl;
         }
+    } catch (e) {}
+
+    // 2. iTunes (Zeer betrouwbaar, makkelijk te upscalen naar 1000+)
+    try {
+        const r = await fetch(`https://itunes.apple.com/search?term=${query}&media=music&limit=1`);
+        const d = await r.json();
+        if (d.results?.[0]) {
+            console.info("✅ iTunes Success");
+            console.groupEnd();
+            return d.results[0].artworkUrl100.replace('100x100bb', '1200x1200bb');
+        }
+    } catch (e) {}
+
+    // 3. Cover Art Archive (Soms traag, maar super hoge kwaliteit)
+    try {
+        const r = await fetch(`https://musicbrainz.org/ws/2/release?query=track:${encodeURIComponent(t)}%20AND%20artist:${encodeURIComponent(a)}&fmt=json&limit=1`);
+        const d = await r.json();
+        if (d.releases?.[0]) {
+            console.info("✅ Cover Art Archive Success");
+            console.groupEnd();
+            return `https://coverartarchive.org/release/${d.releases[0].id}/front-1200`;
+        }
+    } catch (e) {}
+
+    console.log("❌ Geen High-Res gevonden. Terugvallen op Last.fm.");
+    console.groupEnd();
+    return fallback;
+}
 
         function transitionToImage(url) {
             videoLayer.classList.remove('active'); videoLayer.pause();
@@ -388,4 +401,5 @@
     </script>
 </body>
 </html>
+
 
