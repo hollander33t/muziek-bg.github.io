@@ -3,129 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Background Engine - Ultimate Edition</title>
+    <title>Cinematic Slideshow Engine</title>
     <style>
         :root {
-            --blur-amount: 10px;        
-            --saturation: 120%;          
-            --brightness: 100%;          
-            --distortion-amount: 30;    
-            --noise-frequency: 0.01;    
-            --animation-speed: 60s;      
-            --transition-speed: 2.5s;   
-            --fade-speed: 2.0s; 
+            --blur-amount: 8px;        
+            --saturation: 110%;          
+            --brightness: 90%;          
+            --animation-speed: 40s;      
+            --transition-speed: 3.0s; /* Tijd voor crossfade tussen slides */
         }
 
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000; overflow: hidden; }
         #bg-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
         
+        /* Zwarte laag voor als muziek stopt */
         #fade-overlay { 
-            position: absolute; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            background-color: #000; 
-            opacity: 0; 
-            z-index: 100; 
-            pointer-events: none; 
-            transition: opacity var(--fade-speed) ease-in-out; 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background-color: #000; opacity: 0; z-index: 100; pointer-events: none; 
+            transition: opacity 2s ease-in-out; 
         }
         #fade-overlay.black { opacity: 1; }
 
+        /* De achtergrondlagen (Slideshow & Cover Art) */
         .bg-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: 1;
+            /* Filter voor dat "Liquid Glass" effect */
             filter: url(#liquid-glass) blur(var(--blur-amount)) saturate(var(--saturation)) brightness(var(--brightness));
-            transform: scale(1.2); will-change: transform, opacity;
+            transform: scale(1.1); will-change: transform, opacity;
         }
 
-        @keyframes slowBreath { 0% { transform: scale(1.2) rotate(0deg); } 50% { transform: scale(1.3) rotate(2deg); } 100% { transform: scale(1.2) rotate(0deg); } }
-        @keyframes enterZoom { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1.2); opacity: 1; } }
-        @keyframes explodeOut { 0% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(4.0); opacity: 0; } }
+        /* Langzame zoom beweging (Ken Burns effect) */
+        @keyframes drift { 
+            0% { transform: scale(1.1); } 
+            100% { transform: scale(1.25); } 
+        }
 
-        .bg-layer.active { opacity: 1; z-index: 5; animation: slowBreath var(--animation-speed) infinite ease-in-out; }
-        .bg-layer.entering { opacity: 1; z-index: 4; animation: enterZoom var(--transition-speed) cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
-        .bg-layer.exiting { z-index: 6; animation: explodeOut var(--transition-speed) ease-out forwards; }
+        .bg-layer.active { opacity: 1; z-index: 10; animation: drift var(--animation-speed) infinite alternate ease-in-out; }
+        .bg-layer.entering { opacity: 1; z-index: 11; transition: opacity var(--transition-speed) ease-in-out; }
+        .bg-layer.exiting { opacity: 0; z-index: 9; transition: opacity var(--transition-speed) ease-in-out; }
 
-        #video-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: 1; transition: opacity 1s ease-in; }
-        #video-layer.active { opacity: 1 !important; z-index: 10 !important; }
-        
-        /* Debug info voor als je wilt zien wat er gebeurt */
-        #debug-status { position: fixed; bottom: 10px; left: 10px; color: rgba(255,255,255,0.3); font-family: monospace; font-size: 10px; z-index: 200; pointer-events: none; }
+        #debug-status { position: fixed; bottom: 10px; left: 10px; color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px; z-index: 200; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <div id="debug-status" id="status-text">Engine Standby</div>
+    <div id="debug-status">Engine Standby</div>
 
     <div id="bg-container">
         <div id="fade-overlay"></div>
         <img id="bg1" class="bg-layer" src="" alt="">
         <img id="bg2" class="bg-layer" src="" alt="">
-        <video id="video-layer" muted loop playsinline autoplay></video>
     </div>
 
     <svg style="position: absolute; width: 0; height: 0; overflow: hidden;">
         <defs>
             <filter id="liquid-glass" x="-20%" y="-20%" width="140%" height="140%">
-                <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="2" result="noise" id="svg-turbulence" />
-                <feDisplacementMap in="SourceGraphic" in2="noise" scale="30" xChannelSelector="R" yChannelSelector="G" id="svg-displacement" />
+                <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="2" result="noise" />
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="20" xChannelSelector="R" yChannelSelector="G" />
             </filter>
         </defs>
     </svg>
 
     <script>
+        // CONFIGURATIE
         const LASTFM_API_KEY = "6c9c00e45e415acfc71a217c7ba023c8";
         const LASTFM_USER = "Hollander33";
-        const BASE_VIDEO_URL = "https://homeassistant.hollandercloud.com/local/lastfm/";
+        
+        // Pas dit aan naar jouw mapstructuur op GitHub. 
+        // Zorg dat in elke map de bestanden 1.jpg, 2.jpg, etc. heten.
+        const BASE_IMG_PATH = "./assets/"; 
 
-        const VIDEO_BACKGROUNDS = [
-          { video: "HARRY_POTTER.MP4", match: { artist: ["John Williams", "Patrick Doyle", "Nicholas Hooper", "Alexandre Desplat"], album: ["Harry Potter", "Philosopher's Stone", "Chamber of Secrets", "Prisoner of Azkaban", "Goblet of Fire", "Order of the Phoenix", "Half-Blood Prince", "Deathly Hallows"], track: ["Hedwig's Theme", "Snape to Malfoy Manor", "Leaving Hogwarts", "Harry's Wondrous World", "The Face of Voldemort", "The Quidditch Match", "Buckbeak's Flight", "Window to the Past", "Double Trouble", "A Window to the Past", "The Hogwarts Hymn", "Dumbledore's Farewell", "Lily's Theme", "Statues", "Courtyard Apocalypse", "A New Beginning"] } },
-          { video: "DUNE.MP4", match: { artist: ["Hans Zimmer"], album: ["Dune", "Dune: Part Two", "The Dune Sketchbook", "Dune (Original Motion Picture Soundtrack)"], track: ["Paul's Dream", "Ripples in the Sand", "Gom Jabbar", "Dream of Arrakis", "Worm Ride", "Kiss the Ring", "Herald of the Change", "Leaving Caladan", "Beginnings Are Such Delicate Times", "Eclipse", "Lisan al-Gaib", "Resurrection", "Only I Will Remain", "The Voice in My Head", "Ornithopter"] } },
-          { video: "INCEPTION.MP4", match: { artist: ["Hans Zimmer"], album: ["Inception", "Inception (Music from the Motion Picture)"], track: ["Time", "Dream Is Collapsing", "Mombasa", "Old Souls", "Waiting for a Train"] } },
-          { video: "TENET.MP4", match: { artist: ["Ludwig Göransson", "Travis Scott"], album: ["Tenet", "Tenet (Original Motion Picture Soundtrack)"], track: ["Rainy Night In Tallinn", "Windmills", "Meeting Neil", "Posterity", "The Plan (From the Motion Picture 'Tenet')", "The Protagonist", "Foils", "Sator", "Trucks In Place", "Red Room Blue Room", "Inversion"] } },
-          { video: "F1.MP4", match: { artist: ["Brian Tyler"], album: ["Formula 1", "F1 Theme", "F1 The Album"], track: ["Formula 1 Theme", "F1 Main Title", "Formula 1 Theme (Live)", "Slow", "Fast", "Grid", "Podium", "The Start", "Final Lap", "Checkered Flag", "Paddock", "Pit Stop", "Engine Roar"] } },
-          { video: "THE_ADVENTURES_OF_TINTIN.MP4", match: { artist: ["John Williams"], album: ["The Adventures of Tintin", "The Adventures of Tintin: The Secret of the Unicorn"], track: ["The Adventures of Tintin", "Sir Francis and the Unicorn", "Snowy's Theme", "The Secret of the Unicorn", "Tintin", "Captain Haddock", "Sir Francis Drake", "The Milanese Nightingale", "Pursuit on the Karoudjan", "Red Rackham's Curse", "The Adventure Continues", "Bagghar", "Dueling Pirates"] } },
-          { video: "GAME_OF_THRONES.MP4", match: { artist: ["Ramin Djawadi"], album: ["Game of Thrones", "Game of Thrones Season 1-8"], track: ["Light of the Seven", "Game Of Thrones - Main Theme", "The Night King", "Winter Is Coming", "Mhysa", "The Rains of Castamere", "Goodbye Brother", "A Lannister Always Pays His Debts", "Dracarys", "Chaos Is a Ladder", "You Know Nothing", "Jenny of Oldstones", "The Iron Throne", "The Children", "The Winds of Winter", "Battle of the Bastards", "Against All Odds", "The Army of the Dead", "Seven Nation Army", "Truth", "Hear Me Roar", "The Spoils of War", "Hold the Door", "Blood of My Blood", "Dance of Dragons", "Khaleesi", "Things I Do for Love", "The Bells", "Not Today", "Blood of the Dragon", "You'll Be Queen One Day", "You Win or You Die"] } },
-          { video: "HOUSE_OF_THE_DRAGON.MP4", match: { artist: ["Ramin Djawadi"], album: ["HOUSE OF THE DRAGON", "House of the Dragon: Season 1"], track: ["All Must Choose", "The Prince That Was Promised", "Protector of the Realm", "The Crown of Jaeharys", "Dragons Will Reign", "Bloodlines Will Burn", "The Green Council", "The Black Queen", "Fire and Blood", "Reign of the Targaryens", "Fate of the Kingdoms", "A Dance of Dragons"] } },
-          { video: "INTERSTELLAR.MP4", match: { artist: ["Hans Zimmer"], album: ["Interstellar"], track: ["No Time for Caution", "Cornfield Chase", "Day One", "Mountains", "S.T.A.Y.", "Where We're Going", "Coward", "Detach", "First Step", "Message From Home", "The Wormhole", "Dust", "Afraid of Time", "Stay", "Quantum Theory"] } },
-          { video: "OPPENHEIMER.MP4", match: { artist: ["Ludwig Göransson"], album: ["Oppenheimer", "Oppenheimer: Original Motion Picture"], track: ["Destroyer of Worlds", "FREEPORT", "Can You Hear the Music", "TRUCKS IN PLACE", "American Prometheus", "Quantum Mechanics", "Fusion", "Fission", "Manhattan Project", "Los Alamos", "The Trial", "Theory", "Dr. Oppenheimer", "Kitty Comes to Testify", "Something More Important"] } },
-          { video: "THE_DARK_KNIGHT_TRILOGY.MP4", match: { artist: ["Hans Zimmer", "James Newton Howard", "Hanz Zimmer"], album: ["The Dark Knight", "The Batman Trilogy", "Batman Begins", "The Dark Knight Rises", "The Dark Knight (Collectors Edition)"], track: ["A Dark Knight", "Aggressive Expansion", "A Watchful Guardian", "Batman Begins End Credits", "Antrozous", "Molossus", "Rise", "Introduce a Little Anarchy", "Risen From Darkness", "I'm Not a Hero", "Bank Robbery (Prologue)", "Macrotus", "Like a Dog Chasing Cars", "Descent Into Mystery", "Why Do We Fall?", "Gotham's Reckoning", "Mind If I Cut In?", "Imagine the Fire", "The Fire Rises", "Fear Will Find You"] } },
-          { video: "MAN_OF_STEEL.MP4", match: { artist: ["Hans Zimmer"], album: ["Man of Steel", "Man of Steel (Original Motion Picture Soundtrack)"], track: ["Flight (Man of Steel)", "What Are You Going to Do When You Are Not Saving the World?", "Look to the Stars", "Oil Rig", "Sent Here for a Reason", "If You Love These People", "Krypton's Last", "I Will Find Him", "Terraforming", "Launch", "General Zod", "Arcade", "This Is Clark Kent"] } }
+        const THEMES = [
+          { 
+            folder: "harry_potter", 
+            count: 5, // Aantal foto's in de map (1.jpg t/m 5.jpg)
+            match: { artist: ["John Williams", "Alexandre Desplat", "Nicholas Hooper"], album: ["Harry Potter"], track: ["Hedwig", "Hogwarts"] } 
+          },
+          { 
+            folder: "dune", 
+            count: 4, 
+            match: { artist: ["Hans Zimmer"], album: ["Dune"], track: ["Arrakis", "Paul's Dream", "Worm"] } 
+          },
+          { 
+            folder: "inception", 
+            count: 3, 
+            match: { artist: ["Hans Zimmer"], album: ["Inception"], track: ["Time", "Dream"] } 
+          },
+          { 
+            folder: "interstellar", 
+            count: 5, 
+            match: { artist: ["Hans Zimmer"], album: ["Interstellar"], track: ["Cornfield", "No Time for Caution"] } 
+          },
+          { 
+            folder: "tenet", 
+            count: 3, 
+            match: { artist: ["Ludwig Göransson"], album: ["Tenet"] } 
+          },
+          { 
+            folder: "f1", 
+            count: 3, 
+            match: { artist: ["Brian Tyler"], album: ["Formula 1", "F1"], track: ["Formula 1", "Verstappen"] } 
+          },
+          { 
+            folder: "batman", 
+            count: 4, 
+            match: { artist: ["Hans Zimmer"], album: ["Dark Knight", "Batman"], track: ["Molossus", "Gotham"] } 
+          },
+          { 
+             folder: "oppenheimer", 
+             count: 3, 
+             match: { artist: ["Ludwig Göransson"], album: ["Oppenheimer"], track: ["Destroyer", "Trinity"] }
+          }
         ];
 
+        // LOGICA (Niet aanpassen tenzij nodig)
         let currentTrackId = "";
-        let currentMode = ""; 
-        let activeBgIndex = 0; 
+        let activeBgIndex = 1; // 1 of 2
         let idleTimer = null;
-        let isFadedOut = false;
-
-        const fadeOverlay = document.getElementById("fade-overlay");
-        const videoLayer = document.getElementById("video-layer");
+        let slideshowTimer = null;
+        let isIdle = false;
+        
+        const debugText = document.getElementById("debug-status");
         const bg1 = document.getElementById("bg1");
         const bg2 = document.getElementById("bg2");
-        const debugText = document.getElementById("debug-status");
+        const fadeOverlay = document.getElementById("fade-overlay");
 
-        // Helper voor debuggen op het scherm
-        function setStatus(msg) { debugText.innerText = msg; console.log("Status:", msg); }
+        function setStatus(msg) { debugText.innerText = msg; console.log(msg); }
 
         async function fetchLastFm() {
             const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${LASTFM_USER}&api_key=${LASTFM_API_KEY}&format=json&limit=1`;
             try {
-                const response = await fetch(url);
-                const data = await response.json();
-                const track = data.recenttracks?.track?.[0];
+                const r = await fetch(url);
+                const d = await r.json();
+                const track = d.recenttracks?.track?.[0];
                 if (!track) return;
 
                 const isNowPlaying = track['@attr'] && track['@attr'].nowplaying === 'true';
 
                 if (isNowPlaying) {
-                    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-                    if (isFadedOut) {
+                    if (isIdle) {
+                        isIdle = false;
                         fadeOverlay.classList.remove('black');
-                        isFadedOut = false;
-                        if (currentMode === 'video') videoLayer.play();
+                        setStatus("Music detected - Waking up");
                     }
+                    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
 
                     const uniqueId = track.name + track.artist['#text'];
                     if (uniqueId !== currentTrackId) {
@@ -134,142 +155,126 @@
                         await processTrack(track);
                     }
                 } else {
-                    if (!idleTimer && !isFadedOut) {
+                    // Geen muziek aan het spelen
+                    if (!isIdle && !idleTimer) {
+                        setStatus("Geen muziek - Timer gestart (60s)");
                         idleTimer = setTimeout(() => {
-                            fadeOverlay.classList.add('black');
-                            isFadedOut = true;
-                            videoLayer.pause();
-                            setStatus("Idle - Fading out");
+                            isIdle = true;
+                            stopSlideshow();
+                            fadeOverlay.classList.add('black'); // Fade naar zwart
+                            setStatus("Idle Mode - Scherm zwart");
                         }, 60000); 
                     }
                 }
-            } catch (e) { setStatus("Last.fm Fetch Error"); }
+            } catch (e) { setStatus("API Error"); }
         }
 
         async function processTrack(track) {
             const artist = track.artist['#text'];
             const album = track.album['#text'];
             const title = track.name;
-            const matchedVideo = findMatchingVideo(artist, album, title);
+            const theme = findTheme(artist, album, title);
 
-            if (matchedVideo) {
-                const fullUrl = BASE_VIDEO_URL + matchedVideo;
-                setStatus(`Match gevonden: ${matchedVideo}`);
-                
-                const isSameVideo = videoLayer.src.toLowerCase() === fullUrl.toLowerCase();
+            stopSlideshow(); // Stop eventuele vorige slideshows
 
-                if (currentMode !== 'video' || !isSameVideo) {
-                    await runFadeToBlack(() => { playVideo(fullUrl); currentMode = 'video'; });
-                }
+            if (theme) {
+                setStatus(`Thema gevonden: ${theme.folder}`);
+                startSlideshow(theme);
             } else {
-                setStatus("Geen video match, zoek cover art...");
-                const highResImage = await findHighResCover(artist, title, track.image[3]['#text']);
-                
-                const imgLoader = new Image();
-                imgLoader.src = highResImage;
-                imgLoader.onload = async () => {
-                    if (currentMode === 'video') {
-                        await runFadeToBlack(() => { transitionToImage(highResImage); currentMode = 'image'; });
-                    } else { 
-                        transitionToImage(highResImage); 
-                        currentMode = 'image'; 
-                    }
-                };
+                setStatus("Geen thema, zoek cover art...");
+                const coverUrl = await findHighResCover(artist, title, track.image[3]['#text']);
+                transitionToImage(coverUrl);
             }
         }
 
-        async function runFadeToBlack(cb) {
-            fadeOverlay.classList.add('black');
-            await new Promise(r => setTimeout(r, 2000));
-            cb();
-            setTimeout(() => { if (!isFadedOut) fadeOverlay.classList.remove('black'); }, 50);
-        }
-
-        function findMatchingVideo(artist, album, title) {
+        function findTheme(artist, album, title) {
             const lowerTitle = title.toLowerCase();
             const lowerArtist = artist.toLowerCase();
             const lowerAlbum = (album || "").toLowerCase();
-            let bestMatch = null;
-            let highestScore = 0;
-
-            for (const item of VIDEO_BACKGROUNDS) {
-                let m = 0;
-                if (item.match.artist?.some(a => lowerArtist.includes(a.toLowerCase()))) m++;
-                if (item.match.album?.some(al => lowerAlbum.includes(al.toLowerCase()))) {
-                    m += (lowerAlbum.includes("f1") || lowerAlbum.includes("formula 1")) ? 2 : 1;
-                }
-                if (item.match.track) {
-                    if (item.match.track.some(t => t.toLowerCase() === lowerTitle)) m += 3;
-                    else if (item.match.track.some(t => lowerTitle.includes(t.toLowerCase()))) m++;
-                }
-                if (m > highestScore) { highestScore = m; bestMatch = item.video; }
+            
+            // Simpelere match logica
+            for (const theme of THEMES) {
+                if (theme.match.artist?.some(a => lowerArtist.includes(a.toLowerCase()))) return theme;
+                if (theme.match.album?.some(al => lowerAlbum.includes(al.toLowerCase()))) return theme;
+                if (theme.match.track?.some(t => lowerTitle.includes(t.toLowerCase()))) return theme;
             }
-            return highestScore >= 2 ? bestMatch : null;
+            return null;
+        }
+
+        // SLIDESHOW LOGICA
+        function startSlideshow(theme) {
+            let imageIndex = 1;
+            
+            // Functie om volgende slide te pakken
+            const nextSlide = () => {
+                // Randomize of sequentieel? Laten we sequentieel doen met loop
+                const imgPath = `${BASE_IMG_PATH}${theme.folder}/${imageIndex}.jpg`;
+                
+                // Preload afbeelding om flikkering te voorkomen
+                const imgLoader = new Image();
+                imgLoader.src = imgPath;
+                imgLoader.onload = () => {
+                    transitionToImage(imgPath);
+                    // Verhoog index, als we voorbij count zijn, terug naar 1
+                    imageIndex++;
+                    if (imageIndex > theme.count) imageIndex = 1;
+                };
+
+            };
+
+            // Start direct de eerste
+            nextSlide();
+
+            // En herhaal elke 10 seconden
+            slideshowTimer = setInterval(nextSlide, 10000);
+        }
+
+        function stopSlideshow() {
+            if (slideshowTimer) {
+                clearInterval(slideshowTimer);
+                slideshowTimer = null;
+            }
+        }
+
+        function transitionToImage(url) {
+            let activeEl = activeBgIndex === 1 ? bg1 : bg2;
+            let nextEl = activeBgIndex === 1 ? bg2 : bg1;
+
+            nextEl.src = url;
+            
+            // Zorg dat de nieuwe klaar staat
+            nextEl.classList.remove('active', 'exiting');
+            nextEl.classList.add('entering');
+            
+            // De oude gaat weg
+            activeEl.classList.remove('entering', 'active');
+            activeEl.classList.add('exiting');
+
+            // Timeout om classes definitief om te zetten na de transitie
+            setTimeout(() => {
+                nextEl.classList.remove('entering');
+                nextEl.classList.add('active');
+                activeEl.classList.remove('exiting'); // Reset voor volgende keer
+            }, 3000); // Moet matchen met CSS transition-speed
+
+            activeBgIndex = activeBgIndex === 1 ? 2 : 1;
         }
 
         async function findHighResCover(a, t, fallback) {
-            const query = encodeURIComponent(`${t} ${a}`);
+            // Jouw bestaande cover art functie (iets ingekort)
+            const q = encodeURIComponent(`${t} ${a}`);
             try {
-                const r = await fetch(`https://corsproxy.io/?https://api.deezer.com/search/track?q=${query}`);
-                const d = await r.json();
+                let r = await fetch(`https://corsproxy.io/?https://api.deezer.com/search/track?q=${q}`);
+                let d = await r.json();
                 if (d.data?.[0]?.album?.cover_xl) return d.data[0].album.cover_xl;
-            } catch (e) {}
-            try {
-                const r = await fetch(`https://itunes.apple.com/search?term=${query}&media=music&limit=1`);
-                const d = await r.json();
-                if (d.results?.[0]) return d.results[0].artworkUrl100.replace('100x100bb', '1200x1200bb');
             } catch (e) {}
             return fallback;
         }
 
-        function transitionToImage(url) {
-            videoLayer.classList.remove('active'); 
-            videoLayer.pause();
-            if (activeBgIndex === 0) { 
-                bg1.src = url; 
-                bg1.classList.add('active'); 
-                activeBgIndex = 1; 
-                return; 
-            }
-            let oldBg = activeBgIndex === 1 ? bg1 : bg2;
-            let newBg = activeBgIndex === 1 ? bg2 : bg1;
-            newBg.src = url;
-            newBg.classList.remove('active', 'exiting'); 
-            oldBg.classList.remove('active', 'entering');
-            void newBg.offsetWidth; 
-            newBg.classList.add('entering');
-            oldBg.classList.add('exiting');
-            activeBgIndex = activeBgIndex === 1 ? 2 : 1;
-        }
-
-        function playVideo(url) {
-            bg1.classList.remove('active', 'entering', 'exiting'); 
-            bg2.classList.remove('active', 'entering', 'exiting');
-            
-            setStatus("Video loading...");
-            videoLayer.src = url;
-            videoLayer.load();
-            
-            videoLayer.oncanplay = () => {
-                videoLayer.play().then(() => {
-                    videoLayer.classList.add('active');
-                    setStatus("Video playing");
-                }).catch(e => setStatus("Autoplay blocked - Click Page"));
-            };
-        }
-
-        // Eenmalige klik om autoplay-beperkingen van browsers te omzeilen
-        document.body.addEventListener('click', () => {
-            if (currentMode === 'video') videoLayer.play();
-            setStatus("Engine Active");
-        }, { once: true });
-
+        // Start de loop
         fetchLastFm();
         setInterval(fetchLastFm, 5000);
+
     </script>
 </body>
 </html>
-
-
-
-
