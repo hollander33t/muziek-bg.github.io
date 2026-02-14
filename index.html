@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Slideshow v2.2 (Flat Log)</title>
+    <title>Cinematic Slideshow v2.3 (Label Fix)</title>
     <style>
         :root {
             --saturation: 110%;          
@@ -358,7 +358,8 @@
 
                     performTransition(coverUrl, true);
                     
-                    console.log(`%c 🖼️ COVER ART: ${coverUrl.includes('deezer') ? 'Deezer XL' : (coverUrl.includes('apple') ? 'iTunes' : 'Last.FM')}`, "color: #800080; font-weight: bold;");
+                    // AANGEPAST: Betere detectie voor Deezer links (dzcdn)
+                    console.log(`%c 🖼️ COVER ART: ${coverUrl.includes('deezer') || coverUrl.includes('dzcdn') ? 'Deezer XL' : (coverUrl.includes('apple') ? 'iTunes' : 'Last.FM')}`, "color: #800080; font-weight: bold;");
                     console.log(`%c URL: ${coverUrl}`, "color: #666; font-size: 10px;");
                 });
             }
@@ -379,7 +380,7 @@
             return fallback;
         }
 
-        console.log("%c 🚀 ENGINE READY (v2.2 Flat Log)", "background: #006400; color: white; padding: 5px;");
+        console.log("%c 🚀 ENGINE READY (v2.3 Label Fix)", "background: #006400; color: white; padding: 5px;");
         fetchLastFm();
         setInterval(fetchLastFm, 5000);
 
