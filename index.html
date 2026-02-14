@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Slideshow v2.0</title>
+    <title>Cinematic Slideshow v2.2 (Flat Log)</title>
     <style>
         :root {
             --saturation: 110%;          
@@ -111,8 +111,7 @@
         let imageDeck = []; 
         let currentTheme = null;
 
-        // SECURITY: Execution ID (Het "Ticket Nummer")
-        // Dit zorgt ervoor dat oude processen (ghosts) worden genegeerd.
+        // SECURITY: Execution ID
         let currentExecutionID = 0; 
 
         const debugText = document.getElementById("debug-status");
@@ -137,7 +136,6 @@
         // --- ENGINE CORE ---
 
         async function runSlideshowLoop(myExecutionID) {
-            // SECURITY CHECK 1: Mag deze loop nog wel draaien?
             if (!isSlideshowRunning || myExecutionID !== currentExecutionID) return;
 
             let nextUrl = "";
@@ -152,23 +150,17 @@
                 nextUrl = `${BASE_IMG_PATH}${currentTheme.folder}/${index}.jpg`;
                 logMsg = `%c 📸 SLIDE: #${index} (${currentTheme.folder})`;
             } else {
-                return; // Geen thema = geen slideshow
+                return;
             }
 
             try {
-                // Wacht op laden...
                 await preloadAndDecode(nextUrl);
                 
-                // SECURITY CHECK 2: Is er in de tussentijd een nieuw nummer gestart?
-                if (!isSlideshowRunning || myExecutionID !== currentExecutionID) {
-                    console.warn("⛔ Slideshow Aborted: Context Changed during load.");
-                    return;
-                }
+                if (!isSlideshowRunning || myExecutionID !== currentExecutionID) return;
 
-                performTransition(nextUrl, false); // false = geen blur
+                performTransition(nextUrl, false); 
                 console.log(logMsg, "color: #b35900; font-weight: bold;");
 
-                // Plan volgende slide, maar geef het ID mee!
                 slideTimeout = setTimeout(() => runSlideshowLoop(myExecutionID), SLIDE_DURATION_MS);
 
             } catch (err) {
@@ -193,7 +185,6 @@
         }
 
         function performTransition(url, isBlur) {
-            // KILL SWITCH: Stop elke lopende animatie-finish timer
             if (transitionTimeout) {
                 clearTimeout(transitionTimeout);
                 transitionTimeout = null;
@@ -203,26 +194,22 @@
             const nextLayerId = activeLayerId === 'layer-a' ? 'layer-b' : 'layer-a';
             const nextEl = document.getElementById(nextLayerId);
 
-            // Zet klaar
             nextEl.src = url;
             nextEl.className = 'bg-layer idle';
             if (isBlur) nextEl.classList.add('fx-blur');
             else nextEl.classList.add('fx-normal');
 
-            // Forceer browser update
             void nextEl.offsetWidth; 
 
-            // Start Animatie
             nextEl.classList.remove('idle');
             nextEl.classList.add('next'); 
 
-            // Timer om de OUDE laag weg te halen
             transitionTimeout = setTimeout(() => {
-                activeEl.className = 'bg-layer idle'; // Oude laag op zwart
+                activeEl.className = 'bg-layer idle'; 
                 nextEl.classList.remove('next');
-                nextEl.classList.add('active'); // Nieuwe laag volledig actief
+                nextEl.classList.add('active'); 
                 transitionTimeout = null;
-            }, 3000); // Moet matchen met CSS transition
+            }, 3000); 
 
             activeLayerId = nextLayerId;
         }
@@ -233,10 +220,7 @@
             }
             currentTheme = theme;
             isSlideshowRunning = true;
-            
             if (slideTimeout) clearTimeout(slideTimeout);
-            
-            // Start de loop met het huidige ID
             runSlideshowLoop(currentExecutionID);
         }
 
@@ -269,15 +253,13 @@
                     const uniqueId = track.name + track.artist['#text'];
                     if (uniqueId !== currentTrackId) {
                         
-                        // !!! BELANGRIJK: Nieuw nummer = Nieuw Ticket Nummer !!!
                         currentExecutionID++; 
-                        
-                        console.log(`%c 🎵 NEW TRACK: ${track.artist['#text']} - ${track.name}`, "background: #f0f0f0; color: #006400; padding: 4px; font-weight: bold; border-radius: 3px;");
-                        
                         currentTrackId = uniqueId;
-                        setStatus(`Playing: ${track.name}`);
+
+                        console.log("%c========================================", "color: #888; font-weight: bold;");
+                        console.log(`%c 🎵 NEW TRACK: ${track.artist['#text']} - ${track.name}`, "background: #f0f0f0; color: #000; padding: 5px; font-weight: bold; border: 1px solid #ccc;");
                         
-                        // Stop alles wat liep
+                        setStatus(`Playing: ${track.name}`);
                         stopSlideshow();
 
                         processTrack(track, currentExecutionID);
@@ -288,7 +270,7 @@
                         idleTimer = setTimeout(() => {
                             isIdle = true;
                             stopSlideshow();
-                            currentExecutionID++; // Invalideer alles
+                            currentExecutionID++; 
                             fadeOverlay.classList.add('black'); 
                             setStatus("System Idle");
                         }, 60000); 
@@ -308,25 +290,58 @@
             const lowerArtist = artist.toLowerCase();
             const lowerAlbum = (album || "").toLowerCase();
 
-            // 1. Zoek Thema
+            // --- DEBUG LOGGING FLAT ---
+            console.log(`%c 🔍 MATCHING...`, "color: #0088ff; font-weight: bold;");
+            console.log(`   Artist: "${lowerArtist}"`);
+            console.log(`   Album:  "${lowerAlbum}"`);
+            console.log(`   Title:  "${lowerTitle}"`);
+
             if (typeof THEMES !== 'undefined') {
                 for (const t of THEMES) {
                     let m = 0;
-                    if (t.match.artist?.some(a => lowerArtist.includes(a.toLowerCase()))) m++;
+                    let reasons = [];
+
+                    if (t.match.artist?.some(a => lowerArtist.includes(a.toLowerCase()))) {
+                        m++;
+                        reasons.push("Artist");
+                    }
                     if (t.match.album?.some(al => lowerAlbum.includes(al.toLowerCase()))) { 
                         let points = (lowerAlbum.includes("f1") || lowerAlbum.includes("formula 1")) ? 2 : 1;
                         m += points; 
+                        reasons.push(points === 2 ? "Album (F1 Bonus)" : "Album");
                     }
                     if (t.match.track) {
-                        if (t.match.track.some(tr => lowerTitle === tr.toLowerCase())) m += 3; 
-                        else if (t.match.track.some(tr => lowerTitle.includes(tr.toLowerCase()))) m++; 
+                        if (t.match.track.some(tr => lowerTitle === tr.toLowerCase())) {
+                            m += 3; 
+                            reasons.push("Track (Exact)");
+                        }
+                        else if (t.match.track.some(tr => lowerTitle.includes(tr.toLowerCase()))) {
+                            m++; 
+                            reasons.push("Track (Partial)");
+                        }
                     }
+
+                    if (m > 0) {
+                        console.log(`   👉 [${t.folder.padEnd(10)}] Score: ${m} (${reasons.join(", ")})`);
+                    }
+
                     if (m > highestScore) { highestScore = m; theme = t; }
                 }
+            } else {
+                console.warn("⚠️ THEMES array missing!");
             }
 
-            // CHECK: Is dit verzoek nog geldig?
-            if (myExecutionID !== currentExecutionID) return;
+            if (theme) {
+                console.log(`%c ✅ WINNER: ${theme.folder} (Score: ${highestScore})`, "color: green; font-weight: bold;");
+            } else {
+                console.log(`%c ❌ NO MATCH FOUND - Using Cover`, "color: #b30000; font-weight: bold;");
+            }
+            // --------------------------
+
+            if (myExecutionID !== currentExecutionID) {
+                console.log("🛑 STOP: Track changed during matching.");
+                return;
+            }
 
             if (theme) {
                 setStatus(`Theme: ${theme.folder.toUpperCase()}`);
@@ -334,18 +349,11 @@
             } else {
                 setStatus("Fetching Online Cover...");
                 
-                // Haal cover op
                 const coverUrl = await findHighResCover(artist, title, track.image[3]['#text']);
                 
-                // CHECK OPNIEUW: Is de track intussen veranderd terwijl we wachtten op de cover?
-                if (myExecutionID !== currentExecutionID) {
-                    console.warn("🚫 Race Condition Avoided: Old cover fetch discarded.");
-                    return;
-                }
+                if (myExecutionID !== currentExecutionID) return;
 
-                // Preload de cover
                 preloadAndDecode(coverUrl).then(() => {
-                    // LAATSTE CHECK: Is het NOG STEEDS hetzelfde nummer?
                     if (myExecutionID !== currentExecutionID) return;
 
                     performTransition(coverUrl, true);
@@ -371,7 +379,7 @@
             return fallback;
         }
 
-        console.log("%c 🚀 ENGINE READY (v2.0 Secure)", "background: #006400; color: white; padding: 5px;");
+        console.log("%c 🚀 ENGINE READY (v2.2 Flat Log)", "background: #006400; color: white; padding: 5px;");
         fetchLastFm();
         setInterval(fetchLastFm, 5000);
 
