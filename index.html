@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Slideshow Engine - Ultimate</title>
+    <title>Cinematic Slideshow Engine - Ultimate Fade UI</title>
     <style>
         :root {
-            --blur-amount: 0px; /* Geen blur voor scherpe foto's, zet op 8px als je tekst wilt lezen */
+            --blur-amount: 0px; 
             --saturation: 110%;          
             --brightness: 90%;          
-            --animation-speed: 60s; /* Zeer langzame zoom */     
-            --transition-speed: 2.5s; /* Tijd voor crossfade */
+            --animation-speed: 60s;      
+            --transition-speed: 2.5s; 
         }
 
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000; overflow: hidden; }
@@ -27,22 +27,35 @@
         /* De achtergrondlagen */
         .bg-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: 1;
-            /* Subtiel filter */
             filter: saturate(var(--saturation)) brightness(var(--brightness));
             transform: scale(1.0); will-change: transform, opacity;
-        }
-
-        /* Langzame zoom beweging (Ken Burns effect) */
-        @keyframes drift { 
-            0% { transform: scale(1.0); } 
-            100% { transform: scale(1.15); } 
         }
 
         .bg-layer.active { opacity: 1; z-index: 10; animation: drift var(--animation-speed) infinite alternate ease-in-out; }
         .bg-layer.entering { opacity: 1; z-index: 11; transition: opacity var(--transition-speed) ease-in-out; }
         .bg-layer.exiting { opacity: 0; z-index: 9; transition: opacity var(--transition-speed) ease-in-out; }
 
-        #debug-status { position: fixed; bottom: 10px; left: 10px; color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px; z-index: 200; pointer-events: none; }
+        /* --- NIEUWE STIJL VOOR DE TEKST --- */
+        #debug-status { 
+            position: fixed; 
+            bottom: 20px; 
+            left: 20px; 
+            color: rgba(255,255,255,0.7); /* Iets feller voor leesbaarheid */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Mooier lettertype */
+            font-size: 14px; 
+            text-shadow: 0px 2px 4px rgba(0,0,0,0.8);
+            z-index: 200; 
+            pointer-events: none;
+            
+            /* Fade logica */
+            opacity: 0; 
+            transition: opacity 0.3s ease-in-out; 
+        }
+
+        /* Klasse om tekst te tonen */
+        #debug-status.visible {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -60,13 +73,13 @@
         const LASTFM_API_KEY = "6c9c00e45e415acfc71a217c7ba023c8";
         const LASTFM_USER = "Hollander33";
         const BASE_IMG_PATH = "./assets/"; 
-        const SLIDE_INTERVAL_MS = 10000; // Elke 10 seconden nieuwe foto
+        const SLIDE_INTERVAL_MS = 10000; 
 
-        // ALLE THEMA'S UIT JE VORIGE CODE
+        // THEMA LIJST
         const THEMES = [
           { 
             folder: "harry_potter", 
-            count: 5, 
+            count: 16, 
             match: { 
                 artist: ["John Williams", "Patrick Doyle", "Nicholas Hooper", "Alexandre Desplat"], 
                 album: ["Harry Potter", "Philosopher's Stone", "Chamber of Secrets", "Prisoner of Azkaban", "Goblet of Fire", "Order of the Phoenix", "Half-Blood Prince", "Deathly Hallows"], 
@@ -75,7 +88,7 @@
           },
           { 
             folder: "dune", 
-            count: 5, 
+            count: 12, 
             match: { 
                 artist: ["Hans Zimmer"], 
                 album: ["Dune", "Dune: Part Two", "The Dune Sketchbook", "Dune (Original Motion Picture Soundtrack)"], 
@@ -84,7 +97,7 @@
           },
           { 
             folder: "inception", 
-            count: 5, 
+            count: 13, 
             match: { 
                 artist: ["Hans Zimmer"], 
                 album: ["Inception", "Inception (Music from the Motion Picture)"], 
@@ -93,7 +106,7 @@
           },
           { 
             folder: "tenet", 
-            count: 5, 
+            count: 13, 
             match: { 
                 artist: ["Ludwig Göransson", "Travis Scott"], 
                 album: ["Tenet", "Tenet (Original Motion Picture Soundtrack)"], 
@@ -102,7 +115,7 @@
           },
           { 
             folder: "f1", 
-            count: 5, 
+            count: 19, 
             match: { 
                 artist: ["Brian Tyler"], 
                 album: ["Formula 1", "F1 Theme", "F1 The Album"], 
@@ -111,7 +124,7 @@
           },
           { 
             folder: "tintin", 
-            count: 5, 
+            count: 17, 
             match: { 
                 artist: ["John Williams"], 
                 album: ["The Adventures of Tintin", "The Adventures of Tintin: The Secret of the Unicorn"], 
@@ -120,7 +133,7 @@
           },
           { 
             folder: "game_of_thrones", 
-            count: 5, 
+            count: 27, 
             match: { 
                 artist: ["Ramin Djawadi"], 
                 album: ["Game of Thrones", "Game of Thrones Season 1-8"], 
@@ -129,7 +142,7 @@
           },
           { 
             folder: "house_of_the_dragon", 
-            count: 5, 
+            count: 14, 
             match: { 
                 artist: ["Ramin Djawadi"], 
                 album: ["HOUSE OF THE DRAGON", "House of the Dragon: Season 1"], 
@@ -138,7 +151,7 @@
           },
           { 
             folder: "interstellar", 
-            count: 5, 
+            count: 17, 
             match: { 
                 artist: ["Hans Zimmer"], 
                 album: ["Interstellar"], 
@@ -147,7 +160,7 @@
           },
           { 
             folder: "oppenheimer", 
-            count: 5, 
+            count: 18, 
             match: { 
                 artist: ["Ludwig Göransson"], 
                 album: ["Oppenheimer", "Oppenheimer: Original Motion Picture"], 
@@ -156,7 +169,7 @@
           },
           { 
             folder: "dark_knight", 
-            count: 5, 
+            count: 23, 
             match: { 
                 artist: ["Hans Zimmer", "James Newton Howard", "Hanz Zimmer"], 
                 album: ["The Dark Knight", "The Batman Trilogy", "Batman Begins", "The Dark Knight Rises", "The Dark Knight (Collectors Edition)"], 
@@ -165,7 +178,7 @@
           },
           { 
             folder: "man_of_steel", 
-            count: 5, 
+            count: 16, 
             match: { 
                 artist: ["Hans Zimmer"], 
                 album: ["Man of Steel", "Man of Steel (Original Motion Picture Soundtrack)"], 
@@ -179,6 +192,7 @@
         let activeBgIndex = 1; 
         let idleTimer = null;
         let slideshowTimer = null;
+        let statusTextTimer = null; // Timer voor de tekst fade-out
         let isIdle = false;
         
         const debugText = document.getElementById("debug-status");
@@ -186,7 +200,22 @@
         const bg2 = document.getElementById("bg2");
         const fadeOverlay = document.getElementById("fade-overlay");
 
-        function setStatus(msg) { debugText.innerText = msg; console.log(msg); }
+        // --- NIEUWE setStatus FUNCTIE ---
+        function setStatus(msg) { 
+            debugText.innerText = msg; 
+            console.log(msg); 
+
+            // 1. Maak zichtbaar (fade in gebeurt door CSS transition)
+            debugText.classList.add('visible');
+
+            // 2. Reset de vorige timer (zodat hij niet verdwijnt als je net een nieuwe status hebt)
+            if (statusTextTimer) clearTimeout(statusTextTimer);
+
+            // 3. Start nieuwe timer: na 5 seconden weghalen
+            statusTextTimer = setTimeout(() => {
+                debugText.classList.remove('visible');
+            }, 5000);
+        }
 
         async function fetchLastFm() {
             const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${LASTFM_USER}&api_key=${LASTFM_API_KEY}&format=json&limit=1`;
@@ -266,18 +295,26 @@
             return highestScore >= 1 ? bestMatch : null;
         }
 
+        // --- RANDOM SLIDESHOW ---
         function startSlideshow(theme) {
-            let imageIndex = 1;
+            let lastIndex = -1;
+
             const nextSlide = () => {
-                const imgPath = `${BASE_IMG_PATH}${theme.folder}/${imageIndex}.jpg`;
+                let randomIndex;
+                do {
+                    randomIndex = Math.floor(Math.random() * theme.count) + 1;
+                } while (randomIndex === lastIndex && theme.count > 1);
+                
+                lastIndex = randomIndex;
+                const imgPath = `${BASE_IMG_PATH}${theme.folder}/${randomIndex}.jpg`;
+                
                 const imgLoader = new Image();
                 imgLoader.src = imgPath;
                 imgLoader.onload = () => {
                     transitionToImage(imgPath);
-                    imageIndex++;
-                    if (imageIndex > theme.count) imageIndex = 1;
                 };
             };
+
             nextSlide();
             slideshowTimer = setInterval(nextSlide, SLIDE_INTERVAL_MS);
         }
@@ -292,11 +329,9 @@
 
             nextEl.src = url;
             
-            // Nieuwe slide fade in
             nextEl.classList.remove('active', 'exiting');
             nextEl.classList.add('entering');
             
-            // Oude slide fade out
             activeEl.classList.remove('entering', 'active');
             activeEl.classList.add('exiting');
 
@@ -324,6 +359,9 @@
             return fallback;
         }
 
+        // Start direct met een status update zodat je ziet dat hij laadt
+        setStatus("Engine Initializing...");
+        
         fetchLastFm();
         setInterval(fetchLastFm, 5000);
     </script>
