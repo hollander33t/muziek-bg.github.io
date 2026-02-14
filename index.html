@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cinematic Slideshow</title>
+    <style>
+        :root {
+            --saturation: 110%;          
+            --brightness: 90%;          
+            --animation-speed: 60s;       
+            --transition-speed: 3s; 
+        }
+
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000; overflow: hidden; }
+        #bg-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+        
+        #fade-overlay { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background-color: #000; opacity: 0; z-index: 100; pointer-events: none; 
+            transition: opacity 2s ease-in-out; 
+        }
+        #fade-overlay.black { opacity: 1; }
+
+        .bg-layer {
+            position: absolute; top: 0; left: 0; 
+            width: 100vw; height: 100vh; 
+            object-fit: cover; object-position: center center;
+            opacity: 0; z-index: 1;
+            transform: scale(1.0); 
+            will-change: transform, opacity;
+            transition: opacity var(--transition-speed) ease-in-out, filter 2s ease-in-out;
+        }
+
+        .bg-layer.fx-normal { filter: saturate(var(--saturation)) brightness(var(--brightness)); }
+        
+        .bg-layer.fx-blur {
+            filter: blur(20px) saturate(120%) brightness(60%);
+            transform: scale(1.1); 
+        }
+
+        .bg-layer.active { 
+            opacity: 1; z-index: 10; 
+            animation: drift var(--animation-speed) infinite alternate ease-in-out; 
+        }
+
+        .bg-layer.next { 
+            opacity: 1; z-index: 11; 
+            animation: drift var(--animation-speed) infinite alternate ease-in-out; 
+        }
+
+        .bg-layer.idle { opacity: 0; z-index: 1; animation: none; }
+
+        @keyframes drift {
+            0% { transform: scale(1.0) translate(0, 0); }
+            100% { transform: scale(1.15) translate(2%, 1%); }
+        }
+        
+        .bg-layer.fx-blur.active, .bg-layer.fx-blur.next {
+            animation: drift-blur var(--animation-speed) infinite alternate ease-in-out;
+        }
+        @keyframes drift-blur {
+            0% { transform: scale(1.1) translate(0, 0); }
+            100% { transform: scale(1.25) translate(2%, 1%); }
+        }
+
+        #debug-status { 
+            position: fixed; bottom: 20px; left: 20px; 
+            color: rgba(255,255,255,0.6); font-family: 'Courier New', monospace; 
+            font-size: 14px; text-shadow: 0px 2px 4px rgba(0,0,0,0.8);
+            z-index: 200; pointer-events: none; opacity: 0; 
+            transition: opacity 0.5s ease-in-out; 
+        }
+        #debug-status.visible { opacity: 1; }
+    </style>
+</head>
+<body>
+
+    <div id="debug-status">Initializing System...</div>
+
+    <div id="bg-container">
+        <div id="fade-overlay"></div>
+        <img id="layer-a" class="bg-layer idle" src="" alt="">
+        <img id="layer-b" class="bg-layer idle" src="" alt="">
+    </div>
+
+    <script src="themes.js"></script>
+
+    <script>
+        // --- CONFIG ---
+        const LASTFM_API_KEY = "6c9c00e45e415acfc71a217c7ba023c8";
+        const LASTFM_USER = "Hollander33";
+        const BASE_IMG_PATH = "./assets/"; 
+        const SLIDE_DURATION_MS = 12000; 
+
+        // --- STATE ---
+        let currentTrackId = "";
+        let activeLayerId = 'layer-a'; 
+        let slideTimeout = null;
+        let idleTimer = null;
+        let isIdle = false;
+        let imageDeck = []; 
+        let currentTheme = null;
+        let isSlideshowRunning = false;
+        let statusTextTimer = null;
+
+        const debugText = document.getElementById("debug-status");
+        const fadeOverlay = document.getElementById("fade-overlay");
+
+        function setStatus(msg) { 
+            debugText.innerText = "> " + msg; 
+            debugText.classList.add('visible');
+            if (statusTextTimer) clearTimeout(statusTextTimer);
+            statusTextTimer = setTimeout(() => debugText.classList.remove('visible'), 5000);
+        }
+
+        function shuffleDeck(count) {
+            let deck = Array.from({length: count}, (_, i) => i + 1);
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            return deck;
+        }
+
+        // --- ENGINE CORE ---
+        async function runSlideshowLoop() {
+            if (!isSlideshowRunning) return;
+
+            let nextUrl = "";
+            let isBlur = false;
+            let logMsg = "";
+
+            if (currentTheme) {
+                if (imageDeck.length === 0) {
+                    // DECK SHUFFLE LOG (Grijs)
+                    imageDeck = shuffleDeck(currentTheme.count);
+                    console.log("%c 🔀 Deck Reshuffled", "color: #555; font-style: italic;");
+                }
+                const index = imageDeck.pop();
+                nextUrl = `${BASE_IMG_PATH}${currentTheme.folder}/${index}.jpg`;
+                
+                // NERD LOG: SLIDE (Donker Oranje/Koper -> Goed leesbaar op wit)
+                logMsg = `%c 📸 SLIDE: #${index} (${currentTheme.folder})`;
+            } else {
+                isSlideshowRunning = false; 
+                return; 
+            }
+
+            try {
+                await preloadAndDecode(nextUrl);
+                
+                if (!isSlideshowRunning) return;
+
+                performTransition(nextUrl, isBlur);
+                
+                // Log pas als hij echt getoond wordt.
+                // GEBRUIK: Donker Oranje/Bruin (#b35900)
+                console.log(logMsg, "color: #b35900; font-weight: bold;");
+
+                slideTimeout = setTimeout(runSlideshowLoop, SLIDE_DURATION_MS);
+
+            } catch (err) {
+                console.error("❌ Image Load Error:", err);
+                slideTimeout = setTimeout(runSlideshowLoop, 2000); 
+            }
+        }
+
+        function preloadAndDecode(url) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = url;
+                if (img.decode) {
+                    img.decode().then(() => resolve(url)).catch(reject);
+                } else {
+                    img.onload = () => resolve(url);
+                    img.onerror = reject;
+                }
+            });
+        }
+
+        function performTransition(url, isBlur) {
+            const activeEl = document.getElementById(activeLayerId);
+            const nextLayerId = activeLayerId === 'layer-a' ? 'layer-b' : 'layer-a';
+            const nextEl = document.getElementById(nextLayerId);
+
+            nextEl.src = url;
+            nextEl.className = 'bg-layer idle';
+            if (isBlur) nextEl.classList.add('fx-blur');
+            else nextEl.classList.add('fx-normal');
+
+            void nextEl.offsetWidth; 
+
+            nextEl.classList.remove('idle');
+            nextEl.classList.add('next'); 
+
+            setTimeout(() => {
+                activeEl.className = 'bg-layer idle'; 
+                nextEl.classList.remove('next');
+                nextEl.classList.add('active'); 
+            }, 3000); 
+
+            activeLayerId = nextLayerId;
+        }
+
+        function startSlideshow(theme) {
+            if (currentTheme !== theme) {
+                imageDeck = []; 
+            }
+            currentTheme = theme;
+            isSlideshowRunning = true;
+            if (slideTimeout) clearTimeout(slideTimeout);
+            runSlideshowLoop();
+        }
+
+        function stopSlideshow() {
+            isSlideshowRunning = false;
+            currentTheme = null;
+            if (slideTimeout) clearTimeout(slideTimeout);
+        }
+
+        // --- API & LOGIC ---
+        async function fetchLastFm() {
+            const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${LASTFM_USER}&api_key=${LASTFM_API_KEY}&format=json&limit=1`;
+            try {
+                const r = await fetch(url);
+                const d = await r.json();
+                const track = d.recenttracks?.track?.[0];
+                
+                if (!track) return;
+
+                const isNowPlaying = track['@attr'] && track['@attr'].nowplaying === 'true';
+
+                if (isNowPlaying) {
+                    if (isIdle) {
+                        isIdle = false;
+                        fadeOverlay.classList.remove('black');
+                        setStatus("Engine Online");
+                    }
+                    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+
+                    const uniqueId = track.name + track.artist['#text'];
+                    if (uniqueId !== currentTrackId) {
+                        // NEW TRACK LOG: Donkergroen op lichtgrijze achtergrond
+                        console.log(`%c 🎵 NEW TRACK: ${track.artist['#text']} - ${track.name}`, "background: #f0f0f0; color: #006400; padding: 4px; font-weight: bold; border-radius: 3px;");
+                        
+                        currentTrackId = uniqueId;
+                        setStatus(`Playing: ${track.name}`);
+                        processTrack(track);
+                    }
+                } else {
+                    if (!isIdle && !idleTimer) {
+                        setStatus("Silence... Timer started");
+                        idleTimer = setTimeout(() => {
+                            isIdle = true;
+                            stopSlideshow();
+                            fadeOverlay.classList.add('black'); 
+                            setStatus("System Idle");
+                        }, 60000); 
+                    }
+                }
+            } catch (e) { /* Stil falen */ }
+        }
+
+        async function processTrack(track) {
+            const artist = track.artist['#text'];
+            const album = track.album['#text'];
+            const title = track.name;
+            
+            let theme = null;
+            let highestScore = 0;
+            const lowerTitle = title.toLowerCase();
+            const lowerArtist = artist.toLowerCase();
+            const lowerAlbum = (album || "").toLowerCase();
+
+            if (typeof THEMES !== 'undefined') {
+                for (const t of THEMES) {
+                    let m = 0;
+                    if (t.match.artist?.some(a => lowerArtist.includes(a.toLowerCase()))) m++;
+                    if (t.match.album?.some(al => lowerAlbum.includes(al.toLowerCase()))) { 
+                        let points = (lowerAlbum.includes("f1") || lowerAlbum.includes("formula 1")) ? 2 : 1;
+                        m += points; 
+                    }
+                    if (t.match.track) {
+                        if (t.match.track.some(tr => lowerTitle === tr.toLowerCase())) m += 3; 
+                        else if (t.match.track.some(tr => lowerTitle.includes(tr.toLowerCase()))) m++; 
+                    }
+                    if (m > highestScore) { highestScore = m; theme = t; }
+                }
+            }
+
+            stopSlideshow(); 
+
+            if (theme) {
+                setStatus(`Theme: ${theme.folder.toUpperCase()}`);
+                startSlideshow(theme);
+            } else {
+                setStatus("Fetching Online Cover...");
+                
+                const coverUrl = await findHighResCover(artist, title, track.image[3]['#text']);
+                
+                preloadAndDecode(coverUrl).then(() => {
+                    performTransition(coverUrl, true);
+                    // COVER LOG: Paars (#800080)
+                    console.log(`%c 🖼️ COVER ART: ${coverUrl.includes('deezer') ? 'Deezer XL' : (coverUrl.includes('apple') ? 'iTunes' : 'Last.FM')}`, "color: #800080; font-weight: bold;");
+                    console.log(`%c URL: ${coverUrl}`, "color: #666; font-size: 10px;");
+                });
+            }
+        }
+
+        async function findHighResCover(a, t, fallback) {
+            const query = encodeURIComponent(`${t} ${a}`);
+            try {
+                const r = await fetch(`https://corsproxy.io/?https://api.deezer.com/search/track?q=${query}`);
+                const d = await r.json();
+                if (d.data?.[0]?.album?.cover_xl) return d.data[0].album.cover_xl;
+            } catch (e) {}
+            try {
+                const r = await fetch(`https://itunes.apple.com/search?term=${query}&media=music&limit=1`);
+                const d = await r.json();
+                if (d.results?.[0]) return d.results[0].artworkUrl100.replace('100x100bb', '1200x1200bb');
+            } catch (e) {}
+            return fallback;
+        }
+
+        console.log("%c 🚀 ENGINE READY", "background: #006400; color: white; padding: 5px;");
+        fetchLastFm();
+        setInterval(fetchLastFm, 5000);
+
+    </script>
+</body>
+</html>
