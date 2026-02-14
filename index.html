@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Slideshow v2.4 (Blank Fallback)</title>
+    <title>Cinematic Slideshow v2.6 (No LastFM)</title>
     <style>
         :root {
             --saturation: 110%;          
@@ -91,7 +91,7 @@
         const LASTFM_API_KEY = "6c9c00e45e415acfc71a217c7ba023c8";
         const LASTFM_USER = "Hollander33";
         const BASE_IMG_PATH = "./assets/"; 
-        const BLANK_IMG_PATH = "./assets/blank.png"; // <--- NIEUW
+        const BLANK_IMG_PATH = "./assets/blank.png"; 
         const SLIDE_DURATION_MS = 12000; 
 
         // --- STATE & SECURITY ---
@@ -350,16 +350,16 @@
             } else {
                 setStatus("Fetching Online Cover...");
                 
-                // Haal cover op (of null als alles faalt)
-                let coverUrl = await findHighResCover(artist, title, track.image[3]['#text']);
+                // Haal cover op (Deezer/iTunes). LastFM wordt genegeerd.
+                let coverUrl = await findHighResCover(artist, title);
+                
+                // Standaard staat blur AAN (voor covers en blank image)
                 let useBlur = true;
 
                 // FALLBACK LOGICA:
-                // Als coverUrl leeg is, gebruik de Blank Asset
                 if (!coverUrl || coverUrl === "") {
                     coverUrl = BLANK_IMG_PATH;
-                    useBlur = false; // GEEN BLUR OP BLANK IMAGE
-                    console.log(`%c ⚪ NO COVER FOUND - Using Blank Asset`, "color: #555; font-style: italic;");
+                    console.log(`%c ⚪ NO COVER FOUND - Using Blank Asset (Blurred)`, "color: #555; font-style: italic;");
                 }
                 
                 if (myExecutionID !== currentExecutionID) return;
@@ -372,14 +372,14 @@
                     if (coverUrl === BLANK_IMG_PATH) {
                          // Geen cover log
                     } else {
-                        console.log(`%c 🖼️ COVER ART: ${coverUrl.includes('deezer') || coverUrl.includes('dzcdn') ? 'Deezer XL' : (coverUrl.includes('apple') ? 'iTunes' : 'Last.FM')}`, "color: #800080; font-weight: bold;");
+                        console.log(`%c 🖼️ COVER ART: ${coverUrl.includes('deezer') || coverUrl.includes('dzcdn') ? 'Deezer XL' : 'iTunes'}`, "color: #800080; font-weight: bold;");
                         console.log(`%c URL: ${coverUrl}`, "color: #666; font-size: 10px;");
                     }
                 });
             }
         }
 
-        async function findHighResCover(a, t, fallback) {
+        async function findHighResCover(a, t) {
             const query = encodeURIComponent(`${t} ${a}`);
             try {
                 const r = await fetch(`https://corsproxy.io/?https://api.deezer.com/search/track?q=${query}`);
@@ -392,11 +392,11 @@
                 if (d.results?.[0]) return d.results[0].artworkUrl100.replace('100x100bb', '1200x1200bb');
             } catch (e) {}
             
-            // Als fallback (LastFM) ook leeg is, return null, zodat we blank.png kunnen pakken
-            return fallback && fallback.length > 0 ? fallback : null;
+            // GEEN LASTFM MEER! Als Deezer en iTunes falen, return null.
+            return null;
         }
 
-        console.log("%c 🚀 ENGINE READY (v2.4 Blank Fallback)", "background: #006400; color: white; padding: 5px;");
+        console.log("%c 🚀 ENGINE READY (v2.6 No LastFM)", "background: #006400; color: white; padding: 5px;");
         fetchLastFm();
         setInterval(fetchLastFm, 5000);
 
