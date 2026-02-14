@@ -34,7 +34,7 @@ const THEMES = [
     match: { 
         artist: ["Ludwig Göransson", "Travis Scott"], 
         album: ["Tenet", "Tenet (Original Motion Picture Soundtrack)"], 
-        track: ["Rainy Night In Tallinn", "Windmills", "Meeting Neil", "Posterity", "The Plan (From the Motion Picture 'Tenet')", "The Protagonist", "Foils", "Sator", "Trucks In Place", "Red Room Blue Room", "Inversion"] 
+        track: ["Rainy Night In Tallinn", "Windmills", "FREEPORT", "Meeting Neil", "Posterity", "The Plan (From the Motion Picture 'Tenet')", "The Protagonist", "Foils", "Sator", "Trucks In Place", "Red Room Blue Room", "Inversion"] 
     } 
   },
   { 
@@ -88,7 +88,7 @@ const THEMES = [
     match: { 
         artist: ["Ludwig Göransson"], 
         album: ["Oppenheimer", "Oppenheimer: Original Motion Picture"], 
-        track: ["Destroyer of Worlds", "FREEPORT", "Can You Hear the Music", "TRUCKS IN PLACE", "American Prometheus", "Quantum Mechanics", "Fusion", "Fission", "Manhattan Project", "Los Alamos", "The Trial", "Theory", "Dr. Oppenheimer", "Kitty Comes to Testify", "Something More Important"] 
+        track: ["Destroyer of Worlds", "Can You Hear the Music", "American Prometheus", "Quantum Mechanics", "Fusion", "Fission", "Manhattan Project", "Los Alamos", "The Trial", "Theory", "Dr. Oppenheimer", "Kitty Comes to Testify", "Something More Important"] 
     } 
   },
   { 
