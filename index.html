@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Slideshow v2.3 (Label Fix)</title>
+    <title>Cinematic Slideshow v2.4 (Blank Fallback)</title>
     <style>
         :root {
             --saturation: 110%;          
@@ -91,6 +91,7 @@
         const LASTFM_API_KEY = "6c9c00e45e415acfc71a217c7ba023c8";
         const LASTFM_USER = "Hollander33";
         const BASE_IMG_PATH = "./assets/"; 
+        const BLANK_IMG_PATH = "./assets/blank.png"; // <--- NIEUW
         const SLIDE_DURATION_MS = 12000; 
 
         // --- STATE & SECURITY ---
@@ -334,7 +335,7 @@
             if (theme) {
                 console.log(`%c ✅ WINNER: ${theme.folder} (Score: ${highestScore})`, "color: green; font-weight: bold;");
             } else {
-                console.log(`%c ❌ NO MATCH FOUND - Using Cover`, "color: #b30000; font-weight: bold;");
+                console.log(`%c ❌ NO MATCH FOUND - Checking Online...`, "color: #b30000; font-weight: bold;");
             }
             // --------------------------
 
@@ -349,18 +350,31 @@
             } else {
                 setStatus("Fetching Online Cover...");
                 
-                const coverUrl = await findHighResCover(artist, title, track.image[3]['#text']);
+                // Haal cover op (of null als alles faalt)
+                let coverUrl = await findHighResCover(artist, title, track.image[3]['#text']);
+                let useBlur = true;
+
+                // FALLBACK LOGICA:
+                // Als coverUrl leeg is, gebruik de Blank Asset
+                if (!coverUrl || coverUrl === "") {
+                    coverUrl = BLANK_IMG_PATH;
+                    useBlur = false; // GEEN BLUR OP BLANK IMAGE
+                    console.log(`%c ⚪ NO COVER FOUND - Using Blank Asset`, "color: #555; font-style: italic;");
+                }
                 
                 if (myExecutionID !== currentExecutionID) return;
 
                 preloadAndDecode(coverUrl).then(() => {
                     if (myExecutionID !== currentExecutionID) return;
 
-                    performTransition(coverUrl, true);
+                    performTransition(coverUrl, useBlur);
                     
-                    // AANGEPAST: Betere detectie voor Deezer links (dzcdn)
-                    console.log(`%c 🖼️ COVER ART: ${coverUrl.includes('deezer') || coverUrl.includes('dzcdn') ? 'Deezer XL' : (coverUrl.includes('apple') ? 'iTunes' : 'Last.FM')}`, "color: #800080; font-weight: bold;");
-                    console.log(`%c URL: ${coverUrl}`, "color: #666; font-size: 10px;");
+                    if (coverUrl === BLANK_IMG_PATH) {
+                         // Geen cover log
+                    } else {
+                        console.log(`%c 🖼️ COVER ART: ${coverUrl.includes('deezer') || coverUrl.includes('dzcdn') ? 'Deezer XL' : (coverUrl.includes('apple') ? 'iTunes' : 'Last.FM')}`, "color: #800080; font-weight: bold;");
+                        console.log(`%c URL: ${coverUrl}`, "color: #666; font-size: 10px;");
+                    }
                 });
             }
         }
@@ -377,10 +391,12 @@
                 const d = await r.json();
                 if (d.results?.[0]) return d.results[0].artworkUrl100.replace('100x100bb', '1200x1200bb');
             } catch (e) {}
-            return fallback;
+            
+            // Als fallback (LastFM) ook leeg is, return null, zodat we blank.png kunnen pakken
+            return fallback && fallback.length > 0 ? fallback : null;
         }
 
-        console.log("%c 🚀 ENGINE READY (v2.3 Label Fix)", "background: #006400; color: white; padding: 5px;");
+        console.log("%c 🚀 ENGINE READY (v2.4 Blank Fallback)", "background: #006400; color: white; padding: 5px;");
         fetchLastFm();
         setInterval(fetchLastFm, 5000);
 
