@@ -3,20 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Slideshow Engine - Ultimate Fade UI</title>
+    <title>Cinematic Slideshow</title>
     <style>
         :root {
-            --blur-amount: 0px; 
             --saturation: 110%;          
             --brightness: 90%;          
-            --animation-speed: 60s;      
-            --transition-speed: 2.5s; 
+            --animation-speed: 60s;       
+            --transition-speed: 3s; 
         }
 
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000; overflow: hidden; }
         #bg-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
         
-        /* Zwarte laag voor als muziek stopt */
         #fade-overlay { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             background-color: #000; opacity: 0; z-index: 100; pointer-events: none; 
@@ -24,205 +22,211 @@
         }
         #fade-overlay.black { opacity: 1; }
 
-        /* De achtergrondlagen */
         .bg-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: 1;
-            filter: saturate(var(--saturation)) brightness(var(--brightness));
-            transform: scale(1.0); will-change: transform, opacity;
+            position: absolute; top: 0; left: 0; 
+            width: 100vw; height: 100vh; 
+            object-fit: cover; object-position: center center;
+            opacity: 0; z-index: 1;
+            transform: scale(1.0); 
+            will-change: transform, opacity;
+            transition: opacity var(--transition-speed) ease-in-out, filter 2s ease-in-out;
         }
 
-        .bg-layer.active { opacity: 1; z-index: 10; animation: drift var(--animation-speed) infinite alternate ease-in-out; }
-        .bg-layer.entering { opacity: 1; z-index: 11; transition: opacity var(--transition-speed) ease-in-out; }
-        .bg-layer.exiting { opacity: 0; z-index: 9; transition: opacity var(--transition-speed) ease-in-out; }
+        .bg-layer.fx-normal { filter: saturate(var(--saturation)) brightness(var(--brightness)); }
+        
+        .bg-layer.fx-blur {
+            filter: blur(20px) saturate(120%) brightness(60%);
+            transform: scale(1.1); 
+        }
 
-        /* --- NIEUWE STIJL VOOR DE TEKST --- */
+        .bg-layer.active { 
+            opacity: 1; z-index: 10; 
+            animation: drift var(--animation-speed) infinite alternate ease-in-out; 
+        }
+
+        .bg-layer.next { 
+            opacity: 1; z-index: 11; 
+            animation: drift var(--animation-speed) infinite alternate ease-in-out; 
+        }
+
+        .bg-layer.idle { opacity: 0; z-index: 1; animation: none; }
+
+        @keyframes drift {
+            0% { transform: scale(1.0) translate(0, 0); }
+            100% { transform: scale(1.15) translate(2%, 1%); }
+        }
+        
+        .bg-layer.fx-blur.active, .bg-layer.fx-blur.next {
+            animation: drift-blur var(--animation-speed) infinite alternate ease-in-out;
+        }
+        @keyframes drift-blur {
+            0% { transform: scale(1.1) translate(0, 0); }
+            100% { transform: scale(1.25) translate(2%, 1%); }
+        }
+
         #debug-status { 
-            position: fixed; 
-            bottom: 20px; 
-            left: 20px; 
-            color: rgba(255,255,255,0.7); /* Iets feller voor leesbaarheid */
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Mooier lettertype */
-            font-size: 14px; 
-            text-shadow: 0px 2px 4px rgba(0,0,0,0.8);
-            z-index: 200; 
-            pointer-events: none;
-            
-            /* Fade logica */
-            opacity: 0; 
-            transition: opacity 0.3s ease-in-out; 
+            position: fixed; bottom: 20px; left: 20px; 
+            color: rgba(255,255,255,0.6); font-family: 'Courier New', monospace; 
+            font-size: 14px; text-shadow: 0px 2px 4px rgba(0,0,0,0.8);
+            z-index: 200; pointer-events: none; opacity: 0; 
+            transition: opacity 0.5s ease-in-out; 
         }
-
-        /* Klasse om tekst te tonen */
-        #debug-status.visible {
-            opacity: 1;
-        }
+        #debug-status.visible { opacity: 1; }
     </style>
 </head>
 <body>
 
-    <div id="debug-status">Engine Standby</div>
+    <div id="debug-status">Initializing System...</div>
 
     <div id="bg-container">
         <div id="fade-overlay"></div>
-        <img id="bg1" class="bg-layer" src="" alt="">
-        <img id="bg2" class="bg-layer" src="" alt="">
+        <img id="layer-a" class="bg-layer idle" src="" alt="">
+        <img id="layer-b" class="bg-layer idle" src="" alt="">
     </div>
 
+    <script src="themes.js"></script>
+
     <script>
-        // --- CONFIGURATIE ---
+        // --- CONFIG ---
         const LASTFM_API_KEY = "6c9c00e45e415acfc71a217c7ba023c8";
         const LASTFM_USER = "Hollander33";
         const BASE_IMG_PATH = "./assets/"; 
-        const SLIDE_INTERVAL_MS = 10000; 
+        const SLIDE_DURATION_MS = 12000; 
 
-        // THEMA LIJST
-        const THEMES = [
-          { 
-            folder: "harry_potter", 
-            count: 16, 
-            match: { 
-                artist: ["John Williams", "Patrick Doyle", "Nicholas Hooper", "Alexandre Desplat"], 
-                album: ["Harry Potter", "Philosopher's Stone", "Chamber of Secrets", "Prisoner of Azkaban", "Goblet of Fire", "Order of the Phoenix", "Half-Blood Prince", "Deathly Hallows"], 
-                track: ["Hedwig's Theme", "Snape to Malfoy Manor", "Leaving Hogwarts", "Harry's Wondrous World", "The Face of Voldemort", "The Quidditch Match", "Buckbeak's Flight", "Window to the Past", "Double Trouble", "A Window to the Past", "The Hogwarts Hymn", "Dumbledore's Farewell", "Lily's Theme", "Statues", "Courtyard Apocalypse", "A New Beginning"] 
-            } 
-          },
-          { 
-            folder: "dune", 
-            count: 12, 
-            match: { 
-                artist: ["Hans Zimmer"], 
-                album: ["Dune", "Dune: Part Two", "The Dune Sketchbook", "Dune (Original Motion Picture Soundtrack)"], 
-                track: ["Paul's Dream", "Ripples in the Sand", "Gom Jabbar", "Dream of Arrakis", "Worm Ride", "Kiss the Ring", "Herald of the Change", "Leaving Caladan", "Beginnings Are Such Delicate Times", "Eclipse", "Lisan al-Gaib", "Resurrection", "Only I Will Remain", "The Voice in My Head", "Ornithopter"] 
-            } 
-          },
-          { 
-            folder: "inception", 
-            count: 13, 
-            match: { 
-                artist: ["Hans Zimmer"], 
-                album: ["Inception", "Inception (Music from the Motion Picture)"], 
-                track: ["Time", "Dream Is Collapsing", "Mombasa", "Old Souls", "Waiting for a Train"] 
-            } 
-          },
-          { 
-            folder: "tenet", 
-            count: 13, 
-            match: { 
-                artist: ["Ludwig Göransson", "Travis Scott"], 
-                album: ["Tenet", "Tenet (Original Motion Picture Soundtrack)"], 
-                track: ["Rainy Night In Tallinn", "Windmills", "Meeting Neil", "Posterity", "The Plan (From the Motion Picture 'Tenet')", "The Protagonist", "Foils", "Sator", "Trucks In Place", "Red Room Blue Room", "Inversion"] 
-            } 
-          },
-          { 
-            folder: "f1", 
-            count: 19, 
-            match: { 
-                artist: ["Brian Tyler"], 
-                album: ["Formula 1", "F1 Theme", "F1 The Album"], 
-                track: ["Formula 1 Theme", "F1 Main Title", "Formula 1 Theme (Live)", "Slow", "Fast", "Grid", "Podium", "The Start", "Final Lap", "Checkered Flag", "Paddock", "Pit Stop", "Engine Roar"] 
-            } 
-          },
-          { 
-            folder: "tintin", 
-            count: 17, 
-            match: { 
-                artist: ["John Williams"], 
-                album: ["The Adventures of Tintin", "The Adventures of Tintin: The Secret of the Unicorn"], 
-                track: ["The Adventures of Tintin", "Sir Francis and the Unicorn", "Snowy's Theme", "The Secret of the Unicorn", "Tintin", "Captain Haddock", "Sir Francis Drake", "The Milanese Nightingale", "Pursuit on the Karoudjan", "Red Rackham's Curse", "The Adventure Continues", "Bagghar", "Dueling Pirates"] 
-            } 
-          },
-          { 
-            folder: "game_of_thrones", 
-            count: 27, 
-            match: { 
-                artist: ["Ramin Djawadi"], 
-                album: ["Game of Thrones", "Game of Thrones Season 1-8"], 
-                track: ["Light of the Seven", "Game Of Thrones - Main Theme", "The Night King", "Winter Is Coming", "Mhysa", "The Rains of Castamere", "Goodbye Brother", "A Lannister Always Pays His Debts", "Dracarys", "Chaos Is a Ladder", "You Know Nothing", "Jenny of Oldstones", "The Iron Throne", "The Children", "The Winds of Winter", "Battle of the Bastards", "Against All Odds", "The Army of the Dead", "Seven Nation Army", "Truth", "Hear Me Roar", "The Spoils of War", "Hold the Door", "Blood of My Blood", "Dance of Dragons", "Khaleesi", "Things I Do for Love", "The Bells", "Not Today", "Blood of the Dragon", "You'll Be Queen One Day", "You Win or You Die"] 
-            } 
-          },
-          { 
-            folder: "house_of_the_dragon", 
-            count: 14, 
-            match: { 
-                artist: ["Ramin Djawadi"], 
-                album: ["HOUSE OF THE DRAGON", "House of the Dragon: Season 1"], 
-                track: ["All Must Choose", "The Prince That Was Promised", "Protector of the Realm", "The Crown of Jaeharys", "Dragons Will Reign", "Bloodlines Will Burn", "The Green Council", "The Black Queen", "Fire and Blood", "Reign of the Targaryens", "Fate of the Kingdoms", "A Dance of Dragons"] 
-            } 
-          },
-          { 
-            folder: "interstellar", 
-            count: 17, 
-            match: { 
-                artist: ["Hans Zimmer"], 
-                album: ["Interstellar"], 
-                track: ["No Time for Caution", "Cornfield Chase", "Day One", "Mountains", "S.T.A.Y.", "Where We're Going", "Coward", "Detach", "First Step", "Message From Home", "The Wormhole", "Dust", "Afraid of Time", "Stay", "Quantum Theory"] 
-            } 
-          },
-          { 
-            folder: "oppenheimer", 
-            count: 18, 
-            match: { 
-                artist: ["Ludwig Göransson"], 
-                album: ["Oppenheimer", "Oppenheimer: Original Motion Picture"], 
-                track: ["Destroyer of Worlds", "FREEPORT", "Can You Hear the Music", "TRUCKS IN PLACE", "American Prometheus", "Quantum Mechanics", "Fusion", "Fission", "Manhattan Project", "Los Alamos", "The Trial", "Theory", "Dr. Oppenheimer", "Kitty Comes to Testify", "Something More Important"] 
-            } 
-          },
-          { 
-            folder: "dark_knight", 
-            count: 23, 
-            match: { 
-                artist: ["Hans Zimmer", "James Newton Howard", "Hanz Zimmer"], 
-                album: ["The Dark Knight", "The Batman Trilogy", "Batman Begins", "The Dark Knight Rises", "The Dark Knight (Collectors Edition)"], 
-                track: ["A Dark Knight", "Aggressive Expansion", "A Watchful Guardian", "Batman Begins End Credits", "Antrozous", "Molossus", "Rise", "Introduce a Little Anarchy", "Risen From Darkness", "I'm Not a Hero", "Bank Robbery (Prologue)", "Macrotus", "Like a Dog Chasing Cars", "Descent Into Mystery", "Why Do We Fall?", "Gotham's Reckoning", "Mind If I Cut In?", "Imagine the Fire", "The Fire Rises", "Fear Will Find You"] 
-            } 
-          },
-          { 
-            folder: "man_of_steel", 
-            count: 16, 
-            match: { 
-                artist: ["Hans Zimmer"], 
-                album: ["Man of Steel", "Man of Steel (Original Motion Picture Soundtrack)"], 
-                track: ["Flight (Man of Steel)", "What Are You Going to Do When You Are Not Saving the World?", "Look to the Stars", "Oil Rig", "Sent Here for a Reason", "If You Love These People", "Krypton's Last", "I Will Find Him", "Terraforming", "Launch", "General Zod", "Arcade", "This Is Clark Kent"] 
-            } 
-          }
-        ];
-
-        // --- LOGICA ---
+        // --- STATE ---
         let currentTrackId = "";
-        let activeBgIndex = 1; 
+        let activeLayerId = 'layer-a'; 
+        let slideTimeout = null;
         let idleTimer = null;
-        let slideshowTimer = null;
-        let statusTextTimer = null; // Timer voor de tekst fade-out
         let isIdle = false;
-        
+        let imageDeck = []; 
+        let currentTheme = null;
+        let isSlideshowRunning = false;
+        let statusTextTimer = null;
+
         const debugText = document.getElementById("debug-status");
-        const bg1 = document.getElementById("bg1");
-        const bg2 = document.getElementById("bg2");
         const fadeOverlay = document.getElementById("fade-overlay");
 
-        // --- NIEUWE setStatus FUNCTIE ---
         function setStatus(msg) { 
-            debugText.innerText = msg; 
-            console.log(msg); 
-
-            // 1. Maak zichtbaar (fade in gebeurt door CSS transition)
+            debugText.innerText = "> " + msg; 
             debugText.classList.add('visible');
-
-            // 2. Reset de vorige timer (zodat hij niet verdwijnt als je net een nieuwe status hebt)
             if (statusTextTimer) clearTimeout(statusTextTimer);
-
-            // 3. Start nieuwe timer: na 5 seconden weghalen
-            statusTextTimer = setTimeout(() => {
-                debugText.classList.remove('visible');
-            }, 5000);
+            statusTextTimer = setTimeout(() => debugText.classList.remove('visible'), 5000);
         }
 
+        function shuffleDeck(count) {
+            let deck = Array.from({length: count}, (_, i) => i + 1);
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            return deck;
+        }
+
+        // --- ENGINE CORE ---
+        async function runSlideshowLoop() {
+            if (!isSlideshowRunning) return;
+
+            let nextUrl = "";
+            let isBlur = false;
+            let logMsg = "";
+
+            if (currentTheme) {
+                if (imageDeck.length === 0) {
+                    // DECK SHUFFLE LOG (Grijs)
+                    imageDeck = shuffleDeck(currentTheme.count);
+                    console.log("%c 🔀 Deck Reshuffled", "color: #555; font-style: italic;");
+                }
+                const index = imageDeck.pop();
+                nextUrl = `${BASE_IMG_PATH}${currentTheme.folder}/${index}.jpg`;
+                
+                // NERD LOG: SLIDE (Donker Oranje/Koper -> Goed leesbaar op wit)
+                logMsg = `%c 📸 SLIDE: #${index} (${currentTheme.folder})`;
+            } else {
+                isSlideshowRunning = false; 
+                return; 
+            }
+
+            try {
+                await preloadAndDecode(nextUrl);
+                
+                if (!isSlideshowRunning) return;
+
+                performTransition(nextUrl, isBlur);
+                
+                // Log pas als hij echt getoond wordt.
+                // GEBRUIK: Donker Oranje/Bruin (#b35900)
+                console.log(logMsg, "color: #b35900; font-weight: bold;");
+
+                slideTimeout = setTimeout(runSlideshowLoop, SLIDE_DURATION_MS);
+
+            } catch (err) {
+                console.error("❌ Image Load Error:", err);
+                slideTimeout = setTimeout(runSlideshowLoop, 2000); 
+            }
+        }
+
+        function preloadAndDecode(url) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = url;
+                if (img.decode) {
+                    img.decode().then(() => resolve(url)).catch(reject);
+                } else {
+                    img.onload = () => resolve(url);
+                    img.onerror = reject;
+                }
+            });
+        }
+
+        function performTransition(url, isBlur) {
+            const activeEl = document.getElementById(activeLayerId);
+            const nextLayerId = activeLayerId === 'layer-a' ? 'layer-b' : 'layer-a';
+            const nextEl = document.getElementById(nextLayerId);
+
+            nextEl.src = url;
+            nextEl.className = 'bg-layer idle';
+            if (isBlur) nextEl.classList.add('fx-blur');
+            else nextEl.classList.add('fx-normal');
+
+            void nextEl.offsetWidth; 
+
+            nextEl.classList.remove('idle');
+            nextEl.classList.add('next'); 
+
+            setTimeout(() => {
+                activeEl.className = 'bg-layer idle'; 
+                nextEl.classList.remove('next');
+                nextEl.classList.add('active'); 
+            }, 3000); 
+
+            activeLayerId = nextLayerId;
+        }
+
+        function startSlideshow(theme) {
+            if (currentTheme !== theme) {
+                imageDeck = []; 
+            }
+            currentTheme = theme;
+            isSlideshowRunning = true;
+            if (slideTimeout) clearTimeout(slideTimeout);
+            runSlideshowLoop();
+        }
+
+        function stopSlideshow() {
+            isSlideshowRunning = false;
+            currentTheme = null;
+            if (slideTimeout) clearTimeout(slideTimeout);
+        }
+
+        // --- API & LOGIC ---
         async function fetchLastFm() {
             const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${LASTFM_USER}&api_key=${LASTFM_API_KEY}&format=json&limit=1`;
             try {
                 const r = await fetch(url);
                 const d = await r.json();
                 const track = d.recenttracks?.track?.[0];
+                
                 if (!track) return;
 
                 const isNowPlaying = track['@attr'] && track['@attr'].nowplaying === 'true';
@@ -231,117 +235,77 @@
                     if (isIdle) {
                         isIdle = false;
                         fadeOverlay.classList.remove('black');
-                        setStatus("Music detected - Waking up");
+                        setStatus("Engine Online");
                     }
                     if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
 
                     const uniqueId = track.name + track.artist['#text'];
                     if (uniqueId !== currentTrackId) {
+                        // NEW TRACK LOG: Donkergroen op lichtgrijze achtergrond
+                        console.log(`%c 🎵 NEW TRACK: ${track.artist['#text']} - ${track.name}`, "background: #f0f0f0; color: #006400; padding: 4px; font-weight: bold; border-radius: 3px;");
+                        
                         currentTrackId = uniqueId;
-                        setStatus(`Nieuwe track: ${track.name}`);
-                        await processTrack(track);
+                        setStatus(`Playing: ${track.name}`);
+                        processTrack(track);
                     }
                 } else {
                     if (!isIdle && !idleTimer) {
-                        setStatus("Geen muziek - Timer gestart (60s)");
+                        setStatus("Silence... Timer started");
                         idleTimer = setTimeout(() => {
                             isIdle = true;
                             stopSlideshow();
                             fadeOverlay.classList.add('black'); 
-                            setStatus("Idle Mode - Scherm zwart");
+                            setStatus("System Idle");
                         }, 60000); 
                     }
                 }
-            } catch (e) { setStatus("API Error"); }
+            } catch (e) { /* Stil falen */ }
         }
 
         async function processTrack(track) {
             const artist = track.artist['#text'];
             const album = track.album['#text'];
             const title = track.name;
-            const theme = findTheme(artist, album, title);
+            
+            let theme = null;
+            let highestScore = 0;
+            const lowerTitle = title.toLowerCase();
+            const lowerArtist = artist.toLowerCase();
+            const lowerAlbum = (album || "").toLowerCase();
+
+            if (typeof THEMES !== 'undefined') {
+                for (const t of THEMES) {
+                    let m = 0;
+                    if (t.match.artist?.some(a => lowerArtist.includes(a.toLowerCase()))) m++;
+                    if (t.match.album?.some(al => lowerAlbum.includes(al.toLowerCase()))) { 
+                        let points = (lowerAlbum.includes("f1") || lowerAlbum.includes("formula 1")) ? 2 : 1;
+                        m += points; 
+                    }
+                    if (t.match.track) {
+                        if (t.match.track.some(tr => lowerTitle === tr.toLowerCase())) m += 3; 
+                        else if (t.match.track.some(tr => lowerTitle.includes(tr.toLowerCase()))) m++; 
+                    }
+                    if (m > highestScore) { highestScore = m; theme = t; }
+                }
+            }
 
             stopSlideshow(); 
 
             if (theme) {
-                setStatus(`Thema gevonden: ${theme.folder}`);
+                setStatus(`Theme: ${theme.folder.toUpperCase()}`);
                 startSlideshow(theme);
             } else {
-                setStatus("Geen thema, zoek cover art...");
+                setStatus("Fetching Online Cover...");
+                
                 const coverUrl = await findHighResCover(artist, title, track.image[3]['#text']);
-                transitionToImage(coverUrl);
-            }
-        }
-
-        function findTheme(artist, album, title) {
-            const lowerTitle = title.toLowerCase();
-            const lowerArtist = artist.toLowerCase();
-            const lowerAlbum = (album || "").toLowerCase();
-            let bestMatch = null;
-            let highestScore = 0;
-
-            for (const theme of THEMES) {
-                let m = 0;
-                if (theme.match.artist?.some(a => lowerArtist.includes(a.toLowerCase()))) m++;
-                if (theme.match.album?.some(al => lowerAlbum.includes(al.toLowerCase()))) {
-                     m += (lowerAlbum.includes("f1") || lowerAlbum.includes("formula 1")) ? 2 : 1;
-                }
-                if (theme.match.track) {
-                    if (theme.match.track.some(t => t.toLowerCase() === lowerTitle)) m += 3;
-                    else if (theme.match.track.some(t => lowerTitle.includes(t.toLowerCase()))) m++;
-                }
-                if (m > highestScore) { highestScore = m; bestMatch = theme; }
-            }
-            return highestScore >= 1 ? bestMatch : null;
-        }
-
-        // --- RANDOM SLIDESHOW ---
-        function startSlideshow(theme) {
-            let lastIndex = -1;
-
-            const nextSlide = () => {
-                let randomIndex;
-                do {
-                    randomIndex = Math.floor(Math.random() * theme.count) + 1;
-                } while (randomIndex === lastIndex && theme.count > 1);
                 
-                lastIndex = randomIndex;
-                const imgPath = `${BASE_IMG_PATH}${theme.folder}/${randomIndex}.jpg`;
-                
-                const imgLoader = new Image();
-                imgLoader.src = imgPath;
-                imgLoader.onload = () => {
-                    transitionToImage(imgPath);
-                };
-            };
-
-            nextSlide();
-            slideshowTimer = setInterval(nextSlide, SLIDE_INTERVAL_MS);
-        }
-
-        function stopSlideshow() {
-            if (slideshowTimer) { clearInterval(slideshowTimer); slideshowTimer = null; }
-        }
-
-        function transitionToImage(url) {
-            let activeEl = activeBgIndex === 1 ? bg1 : bg2;
-            let nextEl = activeBgIndex === 1 ? bg2 : bg1;
-
-            nextEl.src = url;
-            
-            nextEl.classList.remove('active', 'exiting');
-            nextEl.classList.add('entering');
-            
-            activeEl.classList.remove('entering', 'active');
-            activeEl.classList.add('exiting');
-
-            setTimeout(() => {
-                nextEl.classList.remove('entering');
-                nextEl.classList.add('active');
-                activeEl.classList.remove('exiting'); 
-            }, 3000); 
-
-            activeBgIndex = activeBgIndex === 1 ? 2 : 1;
+                preloadAndDecode(coverUrl).then(() => {
+                    performTransition(coverUrl, true);
+                    // COVER LOG: Paars (#800080)
+                    console.log(`%c 🖼️ COVER ART: ${coverUrl.includes('deezer') ? 'Deezer XL' : (coverUrl.includes('apple') ? 'iTunes' : 'Last.FM')}`, "color: #800080; font-weight: bold;");
+                    console.log(`%c URL: ${coverUrl}`, "color: #666; font-size: 10px;");
+                });
+            }
         }
 
         async function findHighResCover(a, t, fallback) {
@@ -359,11 +323,10 @@
             return fallback;
         }
 
-        // Start direct met een status update zodat je ziet dat hij laadt
-        setStatus("Engine Initializing...");
-        
+        console.log("%c 🚀 ENGINE READY", "background: #006400; color: white; padding: 5px;");
         fetchLastFm();
         setInterval(fetchLastFm, 5000);
+
     </script>
 </body>
 </html>
