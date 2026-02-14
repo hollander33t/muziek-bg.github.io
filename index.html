@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Slideshow</title>
+    <title>Cinematic Slideshow v2.0</title>
     <style>
         :root {
             --saturation: 110%;          
             --brightness: 90%;          
-            --animation-speed: 60s;       
+            --animation-speed: 60s;        
             --transition-speed: 3s; 
         }
 
@@ -93,16 +93,27 @@
         const BASE_IMG_PATH = "./assets/"; 
         const SLIDE_DURATION_MS = 12000; 
 
-        // --- STATE ---
+        // --- STATE & SECURITY ---
         let currentTrackId = "";
         let activeLayerId = 'layer-a'; 
+        
+        // Timers
         let slideTimeout = null;
+        let transitionTimeout = null; 
         let idleTimer = null;
+        let statusTextTimer = null;
+
+        // Flags
         let isIdle = false;
+        let isSlideshowRunning = false;
+        
+        // Data
         let imageDeck = []; 
         let currentTheme = null;
-        let isSlideshowRunning = false;
-        let statusTextTimer = null;
+
+        // SECURITY: Execution ID (Het "Ticket Nummer")
+        // Dit zorgt ervoor dat oude processen (ghosts) worden genegeerd.
+        let currentExecutionID = 0; 
 
         const debugText = document.getElementById("debug-status");
         const fadeOverlay = document.getElementById("fade-overlay");
@@ -124,45 +135,47 @@
         }
 
         // --- ENGINE CORE ---
-        async function runSlideshowLoop() {
-            if (!isSlideshowRunning) return;
+
+        async function runSlideshowLoop(myExecutionID) {
+            // SECURITY CHECK 1: Mag deze loop nog wel draaien?
+            if (!isSlideshowRunning || myExecutionID !== currentExecutionID) return;
 
             let nextUrl = "";
-            let isBlur = false;
             let logMsg = "";
 
             if (currentTheme) {
                 if (imageDeck.length === 0) {
-                    // DECK SHUFFLE LOG (Grijs)
                     imageDeck = shuffleDeck(currentTheme.count);
                     console.log("%c 🔀 Deck Reshuffled", "color: #555; font-style: italic;");
                 }
                 const index = imageDeck.pop();
                 nextUrl = `${BASE_IMG_PATH}${currentTheme.folder}/${index}.jpg`;
-                
-                // NERD LOG: SLIDE (Donker Oranje/Koper -> Goed leesbaar op wit)
                 logMsg = `%c 📸 SLIDE: #${index} (${currentTheme.folder})`;
             } else {
-                isSlideshowRunning = false; 
-                return; 
+                return; // Geen thema = geen slideshow
             }
 
             try {
+                // Wacht op laden...
                 await preloadAndDecode(nextUrl);
                 
-                if (!isSlideshowRunning) return;
+                // SECURITY CHECK 2: Is er in de tussentijd een nieuw nummer gestart?
+                if (!isSlideshowRunning || myExecutionID !== currentExecutionID) {
+                    console.warn("⛔ Slideshow Aborted: Context Changed during load.");
+                    return;
+                }
 
-                performTransition(nextUrl, isBlur);
-                
-                // Log pas als hij echt getoond wordt.
-                // GEBRUIK: Donker Oranje/Bruin (#b35900)
+                performTransition(nextUrl, false); // false = geen blur
                 console.log(logMsg, "color: #b35900; font-weight: bold;");
 
-                slideTimeout = setTimeout(runSlideshowLoop, SLIDE_DURATION_MS);
+                // Plan volgende slide, maar geef het ID mee!
+                slideTimeout = setTimeout(() => runSlideshowLoop(myExecutionID), SLIDE_DURATION_MS);
 
             } catch (err) {
                 console.error("❌ Image Load Error:", err);
-                slideTimeout = setTimeout(runSlideshowLoop, 2000); 
+                if (isSlideshowRunning && myExecutionID === currentExecutionID) {
+                    slideTimeout = setTimeout(() => runSlideshowLoop(myExecutionID), 2000); 
+                }
             }
         }
 
@@ -180,25 +193,36 @@
         }
 
         function performTransition(url, isBlur) {
+            // KILL SWITCH: Stop elke lopende animatie-finish timer
+            if (transitionTimeout) {
+                clearTimeout(transitionTimeout);
+                transitionTimeout = null;
+            }
+
             const activeEl = document.getElementById(activeLayerId);
             const nextLayerId = activeLayerId === 'layer-a' ? 'layer-b' : 'layer-a';
             const nextEl = document.getElementById(nextLayerId);
 
+            // Zet klaar
             nextEl.src = url;
             nextEl.className = 'bg-layer idle';
             if (isBlur) nextEl.classList.add('fx-blur');
             else nextEl.classList.add('fx-normal');
 
+            // Forceer browser update
             void nextEl.offsetWidth; 
 
+            // Start Animatie
             nextEl.classList.remove('idle');
             nextEl.classList.add('next'); 
 
-            setTimeout(() => {
-                activeEl.className = 'bg-layer idle'; 
+            // Timer om de OUDE laag weg te halen
+            transitionTimeout = setTimeout(() => {
+                activeEl.className = 'bg-layer idle'; // Oude laag op zwart
                 nextEl.classList.remove('next');
-                nextEl.classList.add('active'); 
-            }, 3000); 
+                nextEl.classList.add('active'); // Nieuwe laag volledig actief
+                transitionTimeout = null;
+            }, 3000); // Moet matchen met CSS transition
 
             activeLayerId = nextLayerId;
         }
@@ -209,8 +233,11 @@
             }
             currentTheme = theme;
             isSlideshowRunning = true;
+            
             if (slideTimeout) clearTimeout(slideTimeout);
-            runSlideshowLoop();
+            
+            // Start de loop met het huidige ID
+            runSlideshowLoop(currentExecutionID);
         }
 
         function stopSlideshow() {
@@ -241,12 +268,19 @@
 
                     const uniqueId = track.name + track.artist['#text'];
                     if (uniqueId !== currentTrackId) {
-                        // NEW TRACK LOG: Donkergroen op lichtgrijze achtergrond
+                        
+                        // !!! BELANGRIJK: Nieuw nummer = Nieuw Ticket Nummer !!!
+                        currentExecutionID++; 
+                        
                         console.log(`%c 🎵 NEW TRACK: ${track.artist['#text']} - ${track.name}`, "background: #f0f0f0; color: #006400; padding: 4px; font-weight: bold; border-radius: 3px;");
                         
                         currentTrackId = uniqueId;
                         setStatus(`Playing: ${track.name}`);
-                        processTrack(track);
+                        
+                        // Stop alles wat liep
+                        stopSlideshow();
+
+                        processTrack(track, currentExecutionID);
                     }
                 } else {
                     if (!isIdle && !idleTimer) {
@@ -254,6 +288,7 @@
                         idleTimer = setTimeout(() => {
                             isIdle = true;
                             stopSlideshow();
+                            currentExecutionID++; // Invalideer alles
                             fadeOverlay.classList.add('black'); 
                             setStatus("System Idle");
                         }, 60000); 
@@ -262,7 +297,7 @@
             } catch (e) { /* Stil falen */ }
         }
 
-        async function processTrack(track) {
+        async function processTrack(track, myExecutionID) {
             const artist = track.artist['#text'];
             const album = track.album['#text'];
             const title = track.name;
@@ -273,6 +308,7 @@
             const lowerArtist = artist.toLowerCase();
             const lowerAlbum = (album || "").toLowerCase();
 
+            // 1. Zoek Thema
             if (typeof THEMES !== 'undefined') {
                 for (const t of THEMES) {
                     let m = 0;
@@ -289,7 +325,8 @@
                 }
             }
 
-            stopSlideshow(); 
+            // CHECK: Is dit verzoek nog geldig?
+            if (myExecutionID !== currentExecutionID) return;
 
             if (theme) {
                 setStatus(`Theme: ${theme.folder.toUpperCase()}`);
@@ -297,11 +334,22 @@
             } else {
                 setStatus("Fetching Online Cover...");
                 
+                // Haal cover op
                 const coverUrl = await findHighResCover(artist, title, track.image[3]['#text']);
                 
+                // CHECK OPNIEUW: Is de track intussen veranderd terwijl we wachtten op de cover?
+                if (myExecutionID !== currentExecutionID) {
+                    console.warn("🚫 Race Condition Avoided: Old cover fetch discarded.");
+                    return;
+                }
+
+                // Preload de cover
                 preloadAndDecode(coverUrl).then(() => {
+                    // LAATSTE CHECK: Is het NOG STEEDS hetzelfde nummer?
+                    if (myExecutionID !== currentExecutionID) return;
+
                     performTransition(coverUrl, true);
-                    // COVER LOG: Paars (#800080)
+                    
                     console.log(`%c 🖼️ COVER ART: ${coverUrl.includes('deezer') ? 'Deezer XL' : (coverUrl.includes('apple') ? 'iTunes' : 'Last.FM')}`, "color: #800080; font-weight: bold;");
                     console.log(`%c URL: ${coverUrl}`, "color: #666; font-size: 10px;");
                 });
@@ -323,7 +371,7 @@
             return fallback;
         }
 
-        console.log("%c 🚀 ENGINE READY", "background: #006400; color: white; padding: 5px;");
+        console.log("%c 🚀 ENGINE READY (v2.0 Secure)", "background: #006400; color: white; padding: 5px;");
         fetchLastFm();
         setInterval(fetchLastFm, 5000);
 
